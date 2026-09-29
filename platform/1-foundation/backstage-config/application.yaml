@@ -1,0 +1,43 @@
+# ABOUTME: What Backstage needs before it starts: its Postgres, the ExternalSecret that supplies the
+# ABOUTME: Postgres password from OpenBao, and the read-only RBAC for the Kubernetes plugin.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backstage-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/1-foundation/backstage-config/manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backstage
+  ignoreDifferences:
+    - group: external-secrets.io
+      kind: ExternalSecret
+      jqPathExpressions:
+        - .spec.data[].remoteRef.conversionStrategy
+        - .spec.data[].remoteRef.decodingStrategy
+        - .spec.data[].remoteRef.metadataPolicy
+        - .spec.data[].remoteRef.nullBytePolicy
+        - .spec.target.deletionPolicy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

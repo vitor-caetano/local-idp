@@ -1,0 +1,20 @@
+# Scales on request rate from Prometheus. More than 5 requests per second per replica adds one.
+# Try it: hey -z 60s https://${{ values.name }}.localtest.me/  (with the local CA trusted)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ${{ values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: ${{ values.name }}
+  minReplicaCount: 1
+  maxReplicaCount: 3
+  cooldownPeriod: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://kube-prometheus-stack-prometheus.observability.svc:9090
+        query: sum(rate(http_requests_total{namespace="apps",service="${{ values.name }}"}[1m]))
+        threshold: "5"

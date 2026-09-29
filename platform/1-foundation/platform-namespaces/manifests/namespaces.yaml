@@ -1,0 +1,40 @@
+# ABOUTME: Namespaces written to by more than one component. apps is where golden-path services run
+# ABOUTME: and is the only namespace enrolled in the Kyverno policies.
+---
+# Holds the Gateway and its wildcard certificate.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-gateway
+  labels:
+    app.kubernetes.io/part-of: local-idp
+---
+# Backstage, its Postgres, and the Secrets gitea-config writes for it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backstage
+  labels:
+    app.kubernetes.io/part-of: local-idp
+---
+# CI Workflows run here. BuildKit rootless needs seccomp and AppArmor Unconfined, which Pod Security
+# baseline rejects, so this namespace is privileged. Nothing but CI runs in it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ci
+  labels:
+    app.kubernetes.io/part-of: local-idp
+    pod-security.kubernetes.io/enforce: privileged
+---
+# Golden-path services. The opt-in label scopes both Kyverno policy sets to this namespace only, so
+# platform namespaces are never blocked by tenant rules.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps
+  labels:
+    app.kubernetes.io/part-of: local-idp
+    local-idp.dev/policy: enforce
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted

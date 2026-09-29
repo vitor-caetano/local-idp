@@ -1,0 +1,34 @@
+# ABOUTME: Shared namespaces that more than one component writes into, created first (wave 0) so no
+# ABOUTME: Role or Secret lands in a namespace that does not exist yet.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-namespaces
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/1-foundation/platform-namespaces/manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      # Never prune a namespace because a file moved: it takes everything inside with it.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

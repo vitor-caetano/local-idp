@@ -1,0 +1,30 @@
+# ABOUTME: Self-service App-of-Apps, applied at the start of phase 6. Brings up the golden path:
+# ABOUTME: the CI pipeline, the deploy ApplicationSet and its AppProject, and the golden-path policies.
+#
+# go-service/ is a Backstage template, not a Kubernetes manifest, and has no application.yaml, so
+# the include pattern skips it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-self-service
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/2-self-service
+    directory:
+      recurse: true
+      include: "*/application.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

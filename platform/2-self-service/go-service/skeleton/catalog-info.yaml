@@ -1,0 +1,22 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.name }}
+  description: ${{ values.description }}
+  annotations:
+    argocd/app-name: svc-${{ values.name }}
+    backstage.io/kubernetes-id: ${{ values.name }}
+    backstage.io/kubernetes-namespace: apps
+  links:
+    - url: https://${{ values.name }}.localtest.me
+      title: Service
+    - url: https://workflows.localtest.me/workflows/ci
+      title: CI runs
+    - url: https://argocd.localtest.me/applications/argocd/svc-${{ values.name }}
+      title: Deployment
+    - url: https://grafana.localtest.me
+      title: Grafana
+spec:
+  type: service
+  lifecycle: experimental
+  owner: ${{ values.owner }}

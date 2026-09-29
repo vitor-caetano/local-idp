@@ -1,0 +1,163 @@
+# ABOUTME: The CI pipeline every golden-path service runs: clone, vet and test, build and push with
+# ABOUTME: rootless BuildKit, then commit the new image tag so ArgoCD deploys it. Runs in ci.
+#
+# All four steps share one ReadWriteOnce volume. local-path binds it to the node the first step ran
+# on, and the scheduler places the later steps there too, so RWO is enough.
+#
+# Every step runs as uid 1000. The golang image defaults to root; running it as 1000 with HOME and the
+# Go caches on the workspace volume keeps the whole pipeline non-root (defect class 2).
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ci-go-service
+  namespace: ci
+spec:
+  serviceAccountName: ci-runner
+  entrypoint: pipeline
+  arguments:
+    parameters:
+      - name: repo-url
+      - name: repo-name
+      - name: revision
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+  podGC:
+    strategy: OnWorkflowSuccess
+  ttlStrategy:
+    secondsAfterCompletion: 3600
+  templates:
+    - name: pipeline
+      steps:
+        - - name: clone
+            template: clone
+        - - name: test
+            template: test
+        - - name: build
+            template: build
+        - - name: bump-tag
+            template: bump-tag
+
+    - name: clone
+      container:
+        image: golang:1.27.0
+        env: &go-env
+          - name: HOME
+            value: /workspace
+          - name: GOCACHE
+            value: /workspace/.cache/go-build
+          - name: GOPATH
+            value: /workspace/.gopath
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            rm -rf /workspace/src
+            git clone "{{workflow.parameters.repo-url}}" /workspace/src
+            git -C /workspace/src checkout --quiet "{{workflow.parameters.revision}}"
+            git -C /workspace/src log -1 --oneline
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+
+    - name: test
+      container:
+        image: golang:1.27.0
+        env: *go-env
+        workingDir: /workspace/src
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            go vet ./...
+            go test ./...
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+
+    # Rootless BuildKit needs seccomp and AppArmor unconfined for its user namespace, which is why ci
+    # is a privileged Pod Security namespace. It pushes over plain HTTP to the registry container.
+    - name: build
+      container:
+        image: moby/buildkit:v0.33.0-rootless
+        env:
+          - name: BUILDKITD_FLAGS
+            value: --oci-worker-no-process-sandbox
+        command: [buildctl-daemonless.sh]
+        args:
+          - build
+          - --frontend
+          - dockerfile.v0
+          - --local
+          - context=/workspace/src
+          - --local
+          - dockerfile=/workspace/src
+          - --output
+          - type=image,name=kind-registry:5000/services/{{workflow.parameters.repo-name}}:{{workflow.parameters.revision}},push=true,registry.insecure=true
+        securityContext:
+          seccompProfile:
+            type: Unconfined
+          appArmorProfile:
+            type: Unconfined
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+
+    # Commits the tag onto the tip of main, not onto the built revision, so a push that landed while
+    # CI ran is kept. [skip ci] stops the Sensor from building this commit.
+    - name: bump-tag
+      container:
+        image: golang:1.27.0
+        env:
+          - name: HOME
+            value: /workspace
+          - name: GIT_USER
+            valueFrom:
+              secretKeyRef:
+                name: gitea-ci-credentials
+                key: username
+          - name: GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: gitea-ci-credentials
+                key: token
+        workingDir: /workspace/src
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            rev="{{workflow.parameters.revision}}"
+            name="{{workflow.parameters.repo-name}}"
+            push_url="http://${GIT_USER}:${GIT_TOKEN}@gitea-http.gitea.svc:3000/services/${name}.git"
+            git config user.name "local-idp-ci"
+            git config user.email "ci@local-idp.dev"
+            for attempt in 1 2 3; do
+              git fetch --quiet origin main
+              git checkout --quiet -B main origin/main
+              sed -i "s/^\( *newTag:\).*/\1 \"${rev}\"/" manifests/kustomization.yaml
+              git add manifests/kustomization.yaml
+              if git diff --cached --quiet; then
+                echo "tag already ${rev}"
+                exit 0
+              fi
+              git commit --quiet -m "[skip ci] Deploy ${rev}"
+              if git push --quiet "${push_url}" HEAD:main; then
+                echo "deployed tag ${rev}"
+                exit 0
+              fi
+              echo "push rejected, retrying (${attempt})"
+            done
+            exit 1
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace

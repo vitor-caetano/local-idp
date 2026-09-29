@@ -1,0 +1,10 @@
+# ABOUTME: The Backstage org model the golden path needs: the group that owns the template and, by
+# ABOUTME: default, every scaffolded service. Loaded by Backstage from ${PLATFORM_RAW_BASE}.
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+  description: Owns the platform and its golden paths.
+spec:
+  type: team
+  children: []

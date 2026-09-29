@@ -1,0 +1,33 @@
+# ABOUTME: Argo Events controller and CRDs. The EventBus, EventSource and Sensor that turn a Gitea
+# ABOUTME: push into a CI Workflow belong to the golden path (2-self-service/ci-pipeline).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-events
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-events
+    targetRevision: 2.4.22
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-events
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

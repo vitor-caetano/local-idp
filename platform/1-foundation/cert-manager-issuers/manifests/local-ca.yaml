@@ -1,0 +1,40 @@
+# ABOUTME: Bootstraps a local root CA with cert-manager, then exposes it as the local-idp-ca
+# ABOUTME: ClusterIssuer. provision/trust-ca.sh exports the root so your browser trusts it.
+#
+# Three steps, because a CA issuer needs a CA certificate to exist first: the selfsigned issuer signs
+# the root, the root lands in the local-idp-root-ca Secret, and local-idp-ca issues from that Secret.
+# The root is generated in your cluster and dies with it. Nothing about it is in Git.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: local-idp-root-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: local-idp-root-ca
+  secretName: local-idp-root-ca
+  duration: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: local-idp-ca
+spec:
+  ca:
+    # A ClusterIssuer reads its Secret from the cert-manager namespace, where the root lands.
+    secretName: local-idp-root-ca

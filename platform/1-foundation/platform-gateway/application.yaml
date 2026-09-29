@@ -1,0 +1,38 @@
+# ABOUTME: The platform's single Gateway and everything it needs: the GatewayClass, the NodePort
+# ABOUTME: EnvoyProxy that Kind can reach, the wildcard certificate, and the HTTPS redirect.
+#
+# Separate from envoy-gateway, which installs only the controller. A controller with no Gateway
+# reconciles nothing, and every route then sits Accepted=False with "no parent found" while all
+# Applications read green. Keeping them apart makes that gap a missing Application, which is visible.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/1-foundation/platform-gateway/manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform-gateway
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

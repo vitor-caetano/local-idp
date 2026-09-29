@@ -1,0 +1,26 @@
+# ABOUTME: Demonstrates the ESO pull: reads secret/demo from OpenBao and projects it into a
+# ABOUTME: Kubernetes Secret. backstage-config uses the same pattern for a real credential.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: demo-app-credentials
+  namespace: openbao
+  labels:
+    app.kubernetes.io/part-of: local-idp
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: demo-app-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: username
+      remoteRef:
+        key: demo
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: demo
+        property: password

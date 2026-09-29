@@ -1,0 +1,35 @@
+# ABOUTME: The AppProject golden-path services deploy into. It is the contract: services come from
+# ABOUTME: the Gitea services org, land in apps, and may create only the kinds the template produces.
+#
+# Without it, generated Applications would land in `default`, which permits any repo, any namespace
+# and any kind. That would make the template a way to create a cluster-admin-shaped Application.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: golden-path-services
+  namespace: argocd
+  annotations:
+    # Before the ApplicationSet: an Application naming a project that does not exist is rejected.
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Applications generated for golden-path Go services.
+  sourceRepos:
+    - http://gitea-http.gitea.svc:3000/services/*
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: apps
+  # No cluster-scoped resources. An empty allow-list is the only way to say that positively.
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: argoproj.io
+      kind: Rollout
+    - group: ""
+      kind: Service
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+    - group: keda.sh
+      kind: ScaledObject

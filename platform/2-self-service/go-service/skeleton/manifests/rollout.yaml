@@ -1,0 +1,64 @@
+# A replica-weighted canary: half the pods move to the new version, hold 30 seconds, then the rest.
+# replicas is omitted because KEDA owns it through the ScaledObject.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: ${{ values.name }}
+  labels:
+    app: ${{ values.name }}
+    backstage.io/kubernetes-id: ${{ values.name }}
+spec:
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: ${{ values.name }}
+  strategy:
+    canary:
+      steps:
+        - setWeight: 50
+        - pause:
+            duration: 30s
+  template:
+    metadata:
+      labels:
+        app: ${{ values.name }}
+        version: "v1"
+        backstage.io/kubernetes-id: ${{ values.name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # distroless nonroot (defect class 2).
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: app
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

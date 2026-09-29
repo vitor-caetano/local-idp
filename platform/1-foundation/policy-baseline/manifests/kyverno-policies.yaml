@@ -1,0 +1,136 @@
+# ABOUTME: Kyverno baseline ClusterPolicies for namespaces labelled local-idp.dev/policy=enforce.
+# ABOUTME: Audit only, permanently. Hygiene worth reporting, not worth blocking a deploy over.
+#
+# Rule-level validate.failureAction (Kyverno 1.13+); the spec-level validationFailureAction field is
+# deprecated. Scope is a namespaceSelector, so any namespace opts in by carrying the label.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-limits
+  annotations:
+    policies.kyverno.io/title: Require Resource Limits
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  background: true
+  rules:
+    - name: require-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "CPU and memory limits are required for all containers."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-probes
+  annotations:
+    policies.kyverno.io/title: Require Probes
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  background: true
+  rules:
+    - name: require-readiness-probe
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "A readinessProbe is required for all containers."
+        pattern:
+          spec:
+            containers:
+              - readinessProbe: {}
+    - name: require-liveness-probe
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "A livenessProbe is required for all containers."
+        pattern:
+          spec:
+            containers:
+              - livenessProbe: {}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels
+  annotations:
+    policies.kyverno.io/title: Require Labels
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  background: true
+  rules:
+    - name: require-app-and-version-labels
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "The labels 'app' and 'version' are required on pods."
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+              version: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: high
+spec:
+  background: true
+  rules:
+    - name: disallow-privileged-containers
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "Privileged containers are not allowed."
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(privileged): false
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): false

@@ -1,0 +1,34 @@
+# ABOUTME: The local certificate authority: a self-signed root and the CA ClusterIssuer that signs
+# ABOUTME: every platform certificate. Syncs after cert-manager's CRDs exist (wave 1).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-issuers
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/1-foundation/cert-manager-issuers/manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

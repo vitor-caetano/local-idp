@@ -1,0 +1,151 @@
+# ABOUTME: Seeds Gitea for the golden path and hands out the credentials that depend on it.
+# ABOUTME: Idempotent: every step either checks first or replaces what an earlier run wrote.
+#
+# What it does, in order:
+#   1. Creates the public services org that the Backstage template publishes into.
+#   2. Rotates one automation token and writes it to the three places that need it:
+#        argocd/gitea-scm-token          the ApplicationSet's SCM generator
+#        ci/gitea-ci-credentials         the CI pipeline's tag-bump push
+#        backstage/backstage-integrations Backstage's Gitea integration (with the ArgoCD token)
+#   3. Adds an org-level push webhook on services pointing at the Argo Events EventSource, so every
+#      service repo, including ones created later, starts CI with no per-repo setup.
+#   4. Mints a non-expiring ArgoCD token for the read-only backstage account.
+#
+# One token for three consumers is a local-cluster simplification. Rotating it (re-running this Job)
+# updates all three Secrets together; Backstage reads its env at start, so restart it afterwards.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitea-seed
+  namespace: gitea
+  labels:
+    app.kubernetes.io/part-of: local-idp
+spec:
+  backoffLimit: 30
+  template:
+    metadata:
+      labels:
+        app: gitea-seed
+        version: "1.26.1"
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: gitea-seed
+      securityContext:
+        runAsNonRoot: true
+        # The curl image declares its user non-numerically (curl_user). Pin the numeric ids the
+        # image ships with: uid 100, gid 101 (defect class 2).
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          image: curlimages/curl:8.11.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GITEA
+              value: "http://gitea-http.gitea.svc:3000"
+            # From the Secret seed-gitea.sh derives from the Gitea Application, never a second
+            # hardcoded copy (defect class 5).
+            - name: ADMIN_USER
+              valueFrom: { secretKeyRef: { name: gitea-seed-creds, key: username } }
+            - name: ADMIN_PASS
+              valueFrom: { secretKeyRef: { name: gitea-seed-creds, key: password } }
+            - name: ORG
+              value: "services"
+            - name: TOKEN_NAME
+              value: "platform-automation"
+            - name: WEBHOOK_URL
+              value: "http://gitea-eventsource-svc.argo-events.svc:12000/push"
+            - name: ARGOCD_SERVER
+              value: "http://argo-cd-argocd-server.argocd.svc"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              auth="-u ${ADMIN_USER}:${ADMIN_PASS}"
+              api="https://kubernetes.default.svc"
+              ka="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+              ca="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+              # put_secret <namespace> <name> <stringData JSON object>
+              put_secret() {
+                curl -sS --cacert "${ca}" -H "Authorization: Bearer ${ka}" -X DELETE \
+                  "${api}/api/v1/namespaces/$1/secrets/$2" -o /dev/null || true
+                curl -fsS --cacert "${ca}" -H "Authorization: Bearer ${ka}" \
+                  -H 'Content-Type: application/json' -X POST \
+                  "${api}/api/v1/namespaces/$1/secrets" \
+                  -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"$2\"},\"stringData\":$3}" \
+                  -o /dev/null
+                echo "wrote $1/$2"
+              }
+
+              echo "waiting for Gitea API..."
+              until curl -fsS "${GITEA}/api/v1/version" >/dev/null 2>&1; do sleep 3; done
+
+              echo "ensuring org ${ORG} exists"
+              curl -sS ${auth} -X POST "${GITEA}/api/v1/orgs" \
+                -H 'Content-Type: application/json' \
+                -d "{\"username\":\"${ORG}\",\"visibility\":\"public\"}" -o /dev/null || true
+
+              echo "rotating token ${TOKEN_NAME}"
+              curl -sS ${auth} -X DELETE \
+                "${GITEA}/api/v1/users/${ADMIN_USER}/tokens/${TOKEN_NAME}" -o /dev/null || true
+              resp="$(curl -fsS ${auth} -X POST "${GITEA}/api/v1/users/${ADMIN_USER}/tokens" \
+                -H 'Content-Type: application/json' \
+                -d "{\"name\":\"${TOKEN_NAME}\",\"scopes\":[\"write:organization\",\"write:repository\",\"read:user\",\"read:issue\"]}")"
+              token="$(printf '%s' "${resp}" | tr -d '\n\r\t ' | grep -o '"sha1":"[^"]*"' | sed 's/"sha1":"//;s/"$//')"
+              [ -n "${token}" ] || { echo "ERROR: no token returned" >&2; exit 1; }
+
+              put_secret argocd gitea-scm-token "{\"token\":\"${token}\"}"
+              put_secret ci gitea-ci-credentials "{\"username\":\"${ADMIN_USER}\",\"token\":\"${token}\"}"
+
+              echo "ensuring the org push webhook points at Argo Events"
+              if curl -fsS ${auth} "${GITEA}/api/v1/orgs/${ORG}/hooks" | grep -q "${WEBHOOK_URL}"; then
+                echo "webhook already present"
+              else
+                curl -fsS ${auth} -X POST "${GITEA}/api/v1/orgs/${ORG}/hooks" \
+                  -H 'Content-Type: application/json' \
+                  -d "{\"type\":\"gitea\",\"active\":true,\"events\":[\"push\"],\"config\":{\"url\":\"${WEBHOOK_URL}\",\"content_type\":\"json\"}}" \
+                  -o /dev/null
+                echo "webhook created"
+              fi
+
+              # An ACCOUNT token, not a session token. A session JWT expires after 24h and nothing
+              # re-mints it, so Backstage's ArgoCD tab would stop working a day after the build.
+              # POST /api/v1/account/<name>/token with no expiresIn carries no exp claim.
+              echo "minting an ArgoCD token for Backstage"
+              until curl -fsS "${ARGOCD_SERVER}/api/version" >/dev/null 2>&1; do echo "waiting for ArgoCD API..."; sleep 5; done
+              apw="$(curl -fsS --cacert "${ca}" -H "Authorization: Bearer ${ka}" \
+                "${api}/api/v1/namespaces/argocd/secrets/argocd-initial-admin-secret" \
+                | tr -d '\n\r\t ' | grep -o '"password":"[^"]*"' | head -1 \
+                | sed 's/"password":"//;s/"$//' | base64 -d)"
+              asession="$(curl -sS -X POST "${ARGOCD_SERVER}/api/v1/session" \
+                -H 'Content-Type: application/json' \
+                -d "{\"username\":\"admin\",\"password\":\"${apw}\"}" \
+                | tr -d '\n\r\t ' | grep -o '"token":"[^"]*"' | head -1 | sed 's/"token":"//;s/"$//')"
+              [ -n "${asession}" ] || { echo "ERROR: ArgoCD admin login failed" >&2; exit 1; }
+              atoken="$(curl -sS -X POST "${ARGOCD_SERVER}/api/v1/account/backstage/token" \
+                -H "Authorization: Bearer ${asession}" -H 'Content-Type: application/json' -d '{}' \
+                | tr -d '\n\r\t ' | grep -o '"token":"[^"]*"' | head -1 | sed 's/"token":"//;s/"$//')"
+              [ -n "${atoken}" ] || {
+                echo "ERROR: could not mint a backstage account token." >&2
+                echo "  accounts.backstage: apiKey must be set in argocd-cm (0-bootstrap/argocd-values.yaml)." >&2
+                exit 1
+              }
+
+              put_secret backstage backstage-integrations \
+                "{\"GITEA_USERNAME\":\"${ADMIN_USER}\",\"GITEA_PASSWORD\":\"${token}\",\"ARGOCD_AUTH_TOKEN\":\"${atoken}\"}"
+              echo "seed complete"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

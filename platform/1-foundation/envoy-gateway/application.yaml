@@ -1,0 +1,38 @@
+# ABOUTME: Envoy Gateway, the Gateway API implementation. Replaces ingress-nginx, which is end of
+# ABOUTME: life. Installs the Gateway API CRDs it supports, so there is no separate CRD component.
+#
+# The chart is OCI-hosted on Docker Hub. ArgoCD takes the registry path without the oci:// scheme.
+# The data plane Service type (NodePort, so Kind can reach it) is set per Gateway through the
+# EnvoyProxy resource in platform-gateway, not here.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: envoy-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: docker.io/envoyproxy
+    chart: gateway-helm
+    targetRevision: 1.9.2
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-gateway-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Gateway API and Envoy Gateway CRDs exceed the client-side apply annotation limit.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

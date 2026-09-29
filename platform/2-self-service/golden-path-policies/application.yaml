@@ -1,0 +1,42 @@
+# ABOUTME: The golden-path Kyverno rules. Ships Audit; phase 7 flips failureAction to Enforce in Git,
+# ABOUTME: which is the one sanctioned move from Audit to Enforce on this platform.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: golden-path-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/2-self-service/golden-path-policies/manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+  ignoreDifferences:
+    - group: kyverno.io
+      kind: ClusterPolicy
+      jqPathExpressions:
+        - .spec.admission
+        - .spec.emitWarning
+        - .spec.validationFailureAction
+        - .spec.rules[].skipBackgroundRequests
+        - .spec.rules[].validate.allowExistingViolations
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,87 @@
+# ABOUTME: Rules every golden-path workload in apps must meet: images from the local registry, no
+# ABOUTME: mutable tags, non-root. Audit until phase 7, when each failureAction becomes Enforce.
+#
+# The template already satisfies all three, so enforcing them blocks only workloads that bypass the
+# golden path. That is the point of the phase 7 demonstration: a hand-written Pod pulling
+# docker.io/nginx:latest into apps is denied, while a scaffolded service deploys untouched.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: golden-path-restrict-registries
+  annotations:
+    policies.kyverno.io/title: Images From The Local Registry
+    policies.kyverno.io/category: Supply Chain
+    policies.kyverno.io/severity: high
+spec:
+  background: true
+  rules:
+    - name: local-registry-only
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "Images in apps must come from the platform registry (localhost:5001/)."
+        pattern:
+          spec:
+            containers:
+              - image: "localhost:5001/*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: golden-path-disallow-latest
+  annotations:
+    policies.kyverno.io/title: Disallow Mutable Tags
+    policies.kyverno.io/category: Supply Chain
+    policies.kyverno.io/severity: medium
+spec:
+  background: true
+  rules:
+    - name: require-explicit-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "Images must carry an explicit tag other than latest."
+        pattern:
+          spec:
+            containers:
+              - image: "*:* & !*:latest"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: golden-path-require-non-root
+  annotations:
+    policies.kyverno.io/title: Require Non-Root
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: high
+spec:
+  background: true
+  rules:
+    - name: run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        failureAction: Audit
+        message: "Pods in apps must set securityContext.runAsNonRoot: true."
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true

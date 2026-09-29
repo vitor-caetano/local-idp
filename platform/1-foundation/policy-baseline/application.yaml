@@ -1,0 +1,45 @@
+# ABOUTME: The Kyverno baseline for the apps namespace. Last wave, Audit forever: it reports what a
+# ABOUTME: workload gets wrong without ever blocking it. The golden-path set is the one that enforces.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: policy-baseline
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/1-foundation/policy-baseline/manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+  # Kyverno's webhook defaults several fields onto every ClusterPolicy after apply. The manifests set
+  # only background and rules, so ArgoCD sees the defaults as drift. jsonPointers cannot reach into
+  # the rules array, so these are jq paths.
+  ignoreDifferences:
+    - group: kyverno.io
+      kind: ClusterPolicy
+      jqPathExpressions:
+        - .spec.admission
+        - .spec.emitWarning
+        - .spec.validationFailureAction
+        - .spec.rules[].skipBackgroundRequests
+        - .spec.rules[].validate.allowExistingViolations
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

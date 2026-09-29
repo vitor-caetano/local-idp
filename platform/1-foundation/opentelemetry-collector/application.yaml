@@ -1,0 +1,63 @@
+# ABOUTME: The OpenTelemetry Collector: OTLP in on 4317/4318, Tempo out. Instrumented workloads
+# ABOUTME: send to opentelemetry-collector.observability.svc, never to Tempo directly.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opentelemetry-collector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.158.2
+    helm:
+      valuesObject:
+        # The chart has no default mode or image repository; both are required.
+        mode: deployment
+        replicaCount: 1
+        image:
+          repository: otel/opentelemetry-collector-k8s
+        presets:
+          kubernetesAttributes:
+            enabled: true
+        config:
+          processors:
+            # memory_limiter must come first in each pipeline.
+            memory_limiter:
+              check_interval: 1s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+          exporters:
+            otlp/tempo:
+              endpoint: tempo.observability.svc:4317
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              # The kubernetesAttributes preset inserts k8sattributes into this list itself. Naming
+              # it here as well puts it in twice and the collector refuses the config.
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, batch]
+                exporters: [otlp/tempo]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
