@@ -29,6 +29,26 @@ rdctl shell sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user
 | `uv` | Running the test suite |
 | `go` 1.27 (optional) | Lets the cluster-free suite run the golden-path service's own tests |
 
+### With Devbox (pinned)
+
+`devbox.json` pins every tool above. Docker stays on the host (Rancher Desktop).
+
+```bash
+devbox shell        # first run installs Nix (asks for sudo) and the packages
+```
+
+Inside the shell:
+
+- `kind` v0.33.0 comes from its GitHub release, checked against the published sha256, because
+  Nixhub lags the Kind release. `scripts/install-kind.sh` puts it in `.devbox/bin`.
+- `yarn` is the Corepack shim from Node 24, so the Backstage scaffold gets the yarn 4 it pins.
+- `KUBECONFIG` points at `~/.kube/local-idp`, so no command falls back to `~/.kube/config`.
+
+Scripts: `devbox run test` (cluster-free suite), `devbox run test-cluster <test file>` (sets
+`KUBECONFIG_FILE` and `EXPECTED_CONTEXT`), `devbox run check-context`, `devbox run inotify`.
+
+### With Homebrew
+
 ```bash
 brew install kind kubectl helm node@24 yarn uv go
 ```

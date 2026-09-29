@@ -20,3 +20,6 @@ provision/local-idp-ca.crt
 
 # OS noise
 .DS_Store
+
+# Devbox
+.devbox/
