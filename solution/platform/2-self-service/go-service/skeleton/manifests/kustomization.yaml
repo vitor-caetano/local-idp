@@ -1,0 +1,15 @@
+# The CI pipeline rewrites newTag after every build. "initial" does not exist in the registry, so
+# the very first sync shows ImagePullBackOff until the first build finishes.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: apps
+resources:
+  - rollout.yaml
+  - service.yaml
+  - httproute.yaml
+  - servicemonitor.yaml
+  - scaledobject.yaml
+images:
+  - name: app
+    newName: localhost:5001/services/${{ values.name }}
+    newTag: "initial"

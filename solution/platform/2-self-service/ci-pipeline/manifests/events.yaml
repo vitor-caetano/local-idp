@@ -1,0 +1,127 @@
+# ABOUTME: Argo Events wiring: the EventBus, the webhook EventSource Gitea posts pushes to, and the
+# ABOUTME: Sensor that turns a push on main into a ci-go-service Workflow.
+---
+# The chart installs no EventBus, and EventSources and Sensors do nothing without one. JetStream,
+# because STAN is end of life. Three replicas is the JetStream minimum.
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: argo-events
+spec:
+  jetstream:
+    # "latest" is resolved by the argo-events controller config to the JetStream version that
+    # chart 2.4.22 ships, so it moves only when the chart pin moves.
+    version: latest
+    replicas: 3
+    persistence:
+      accessMode: ReadWriteOnce
+      volumeSize: 1Gi
+---
+# Gitea's org webhook (created by gitea-config) posts here. The controller creates the Service
+# gitea-eventsource-svc on 12000.
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: gitea
+  namespace: argo-events
+spec:
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  webhook:
+    push:
+      port: "12000"
+      endpoint: /push
+      method: POST
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-sensor
+  namespace: argo-events
+---
+# The Sensor submits Workflows into ci and needs nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-sensor-submit
+  namespace: ci
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["create", "get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-sensor-submit
+  namespace: ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-sensor-submit
+subjects:
+  - kind: ServiceAccount
+    name: ci-sensor
+    namespace: argo-events
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: ci-go-service
+  namespace: argo-events
+spec:
+  template:
+    serviceAccountName: ci-sensor
+  dependencies:
+    - name: push
+      eventSourceName: gitea
+      eventName: push
+      filters:
+        data:
+          - path: body.ref
+            type: string
+            value:
+              - "refs/heads/main"
+          # The pipeline's own tag-bump commit carries [skip ci]. Without this filter that commit
+          # fires the webhook, which builds, which commits, forever.
+          - path: body.head_commit.message
+            type: string
+            value:
+              - "\\[skip ci\\]"
+            comparator: "!="
+  triggers:
+    - template:
+        name: submit-ci
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: ci-
+                namespace: ci
+              spec:
+                workflowTemplateRef:
+                  name: ci-go-service
+                arguments:
+                  parameters:
+                    - name: repo-url
+                    - name: repo-name
+                    - name: revision
+          parameters:
+            - src:
+                dependencyName: push
+                dataKey: body.repository.clone_url
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: push
+                dataKey: body.repository.name
+              dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: push
+                dataKey: body.after
+              dest: spec.arguments.parameters.2.value

@@ -1,0 +1,23 @@
+# ABOUTME: Runs the cluster-free suite on every push and pull request. Cluster-bound tests skip
+# ABOUTME: themselves when KUBECONFIG_FILE is unset, so the whole suite is safe here.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+      - run: pip install pytest pyyaml
+      - run: python scripts/check_components.py
+      - run: pytest -q

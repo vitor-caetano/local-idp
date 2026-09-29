@@ -1,0 +1,22 @@
+# Claude Code local settings
+.claude/settings.local.json
+.claude/settings.local.json.tmp.*
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Secrets and local env (never committed; the repo holds zero real credentials)
+.env
+*.env
+
+# The generated Backstage app that images/backstage/build-and-push.sh scaffolds
+images/backstage/backstage-app/
+
+# The local CA exported by provision/trust-ca.sh
+provision/local-idp-ca.crt
+
+# OS noise
+.DS_Store

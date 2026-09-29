@@ -1,0 +1,45 @@
+# ABOUTME: OpenBao (Linux Foundation, MPL-2.0 fork of Vault) as the in-cluster secret backend that
+# ABOUTME: External Secrets Operator pulls from. Dev mode, wave 1.
+#
+# Dev mode runs a single unsealed in-memory pod with a fixed root token and KV v2 at secret/. Right
+# for a laptop cluster, never for production. A pod restart empties it; the ExternalSecrets keep the
+# Secrets they already wrote, and re-syncing openbao-config re-seeds it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://openbao.github.io/openbao-helm
+    chart: openbao
+    targetRevision: 0.28.4
+    helm:
+      valuesObject:
+        server:
+          dev:
+            enabled: true
+            devRootToken: "root"
+        injector:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openbao
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

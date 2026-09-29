@@ -1,0 +1,93 @@
+# ABOUTME: Backstage, the front door. Custom image from the local registry, catalog in Postgres,
+# ABOUTME: Gitea for the golden path, the ArgoCD and Kubernetes plugins for live state.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backstage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://backstage.github.io/charts
+    chart: backstage
+    targetRevision: 2.8.2
+    helm:
+      valuesObject:
+        backstage:
+          image:
+            # Built and pushed by images/backstage/build-and-push.sh. The chart builds the ref as
+            # registry/repository:tag, so repository must not repeat the host (defect class 3).
+            registry: localhost:5001
+            repository: local-idp/backstage
+            tag: "0.1.0"
+            pullPolicy: IfNotPresent
+          # The image's app-config.production.yaml is a complete config; load it alone.
+          args:
+            - "--config"
+            - "app-config.production.yaml"
+          extraEnvVars:
+            - name: BACKSTAGE_BASE_URL
+              value: https://backstage.localtest.me
+            - name: GITEA_HOST
+              value: gitea-http.gitea.svc:3000
+            - name: ARGOCD_URL
+              value: http://argo-cd-argocd-server.argocd.svc
+            - name: POSTGRES_HOST
+              value: backstage-postgres.backstage.svc
+            - name: POSTGRES_PORT
+              value: "5432"
+            # Where the catalog reads the golden-path template and the org file from. Set by
+            # provision/set-git-source.sh together with every Application's repoURL.
+            - name: PLATFORM_RAW_BASE
+              value: REPLACE_WITH_PLATFORM_RAW_BASE
+            - name: K8S_SA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-sa-token
+                  key: token
+          # backstage-integrations is written by gitea-config's seed Job; backstage-postgres by the
+          # ExternalSecret in backstage-config. Backstage retries until both exist.
+          extraEnvVarsSecrets:
+            - backstage-integrations
+            - backstage-postgres
+          podSecurityContext:
+            runAsNonRoot: true
+            # The node user in the node base image is uid/gid 1000 (defect class 2).
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+        serviceAccount:
+          create: false
+          name: backstage
+        # The bundled Bitnami PostgreSQL is off; backstage-config runs Postgres.
+        postgresql:
+          enabled: false
+        service:
+          type: ClusterIP
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backstage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

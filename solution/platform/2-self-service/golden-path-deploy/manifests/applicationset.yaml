@@ -1,0 +1,48 @@
+# ABOUTME: One ArgoCD Application per repo in the Gitea services org that has a manifests/ directory.
+# ABOUTME: The Backstage template creates the repo; this is what makes it run.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: golden-path-services
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - scmProvider:
+        # Rescan every minute, so a freshly scaffolded service gets its Application quickly.
+        requeueAfterSeconds: 60
+        gitea:
+          owner: services
+          api: http://gitea-http.gitea.svc:3000
+          allBranches: false
+          tokenRef:
+            secretName: gitea-scm-token
+            key: token
+        filters:
+          - pathsExist:
+              - manifests
+  template:
+    metadata:
+      name: "svc-{{ .repository }}"
+      labels:
+        local-idp.dev/golden-path: go-service
+    spec:
+      project: golden-path-services
+      source:
+        # The clone URL Gitea reports, which is in-cluster because of its ROOT_URL.
+        repoURL: "{{ .url }}"
+        targetRevision: "{{ .branch }}"
+        path: manifests
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: apps
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

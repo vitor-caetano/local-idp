@@ -1,0 +1,72 @@
+# ABOUTME: Seeds OpenBao: a demo secret for the ESO walkthrough, and Backstage's Postgres credentials
+# ABOUTME: with a password generated in the cluster, so no value for it ever exists in Git.
+#
+# The Postgres password is written only if absent. Rotating it here would not rotate it in Postgres,
+# which reads POSTGRES_PASSWORD once, when its data directory is first initialised.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-seed
+  namespace: openbao
+  labels:
+    app.kubernetes.io/part-of: local-idp
+spec:
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        app: openbao-seed
+        version: "2.5.5"
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # The bao image declares its user non-numerically (uid 100 "openbao"), so runAsNonRoot alone
+        # leaves the kubelet unable to verify non-root (defect class 2). Pin the numeric ids.
+        runAsUser: 100
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          image: quay.io/openbao/openbao:2.5.5
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "waiting for OpenBao to answer..."
+              until bao status >/dev/null 2>&1; do sleep 3; done
+
+              bao kv put secret/demo username=local-idp password=not-a-secret
+              echo "seeded secret/demo"
+
+              if bao kv get secret/backstage-postgres >/dev/null 2>&1; then
+                echo "secret/backstage-postgres already present, leaving it"
+              else
+                pw="$(head -c 24 /dev/urandom | base64 | tr -d '/+=')"
+                bao kv put secret/backstage-postgres username=backstage password="${pw}"
+                echo "seeded secret/backstage-postgres"
+              fi
+          env:
+            - name: BAO_ADDR
+              value: "http://openbao.openbao.svc:8200"
+            # Read from the one Secret the ClusterSecretStore also uses (defect class 5).
+            - name: BAO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openbao-root-token
+                  key: token
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

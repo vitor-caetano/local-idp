@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(kubectl get:*)",
+      "Bash(kubectl describe:*)",
+      "Bash(kubectl logs:*)",
+      "Bash(kubectl explain:*)",
+      "Bash(kubectl api-resources:*)",
+      "Bash(kubectl config current-context:*)",
+      "Bash(helm template:*)",
+      "Bash(helm show:*)",
+      "Bash(helm lint:*)",
+      "Bash(uv run --group test pytest:*)",
+      "Bash(./scripts/smoke-test.sh)"
+    ],
+    "ask": [
+      "Bash(kubectl apply:*)",
+      "Bash(kubectl create:*)",
+      "Bash(kubectl delete:*)",
+      "Bash(kubectl patch:*)",
+      "Bash(kubectl replace:*)",
+      "Bash(kubectl rollout:*)",
+      "Bash(helm install:*)",
+      "Bash(helm upgrade:*)",
+      "Bash(helm uninstall:*)",
+      "Bash(kind create:*)",
+      "Bash(kind delete:*)",
+      "Bash(git push:*)",
+      "Bash(./provision/*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Edit(.claude/**)"
+    ]
+  }
+}

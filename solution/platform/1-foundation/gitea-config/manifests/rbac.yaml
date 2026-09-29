@@ -1,0 +1,86 @@
+# ABOUTME: Service account and RBAC for the Gitea seed Job. Each Role lets it write Secrets in one
+# ABOUTME: namespace that consumes the automation token: argocd, ci and backstage.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitea-seed
+  namespace: gitea
+  labels:
+    app.kubernetes.io/part-of: local-idp
+---
+# argocd: gitea-scm-token for the ApplicationSet. Also reads argocd-initial-admin-secret to mint the
+# Backstage account token.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitea-seed-secret-writer
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "update", "get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitea-seed-secret-writer
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gitea-seed-secret-writer
+subjects:
+  - kind: ServiceAccount
+    name: gitea-seed
+    namespace: gitea
+---
+# ci: gitea-ci-credentials, which the pipeline pushes the image-tag commit with.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitea-seed-secret-writer
+  namespace: ci
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "update", "get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitea-seed-secret-writer
+  namespace: ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gitea-seed-secret-writer
+subjects:
+  - kind: ServiceAccount
+    name: gitea-seed
+    namespace: gitea
+---
+# backstage: backstage-integrations, the Gitea and ArgoCD credentials Backstage reads.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitea-seed-secret-writer
+  namespace: backstage
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "update", "get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitea-seed-secret-writer
+  namespace: backstage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gitea-seed-secret-writer
+subjects:
+  - kind: ServiceAccount
+    name: gitea-seed
+    namespace: gitea

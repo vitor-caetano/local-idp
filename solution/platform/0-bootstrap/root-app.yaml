@@ -1,0 +1,32 @@
+# ABOUTME: Foundation App-of-Apps. Points ArgoCD at platform/1-foundation and recurses for the
+# ABOUTME: per-component Application manifests. Applied by provision/seed-gitea.sh.
+#
+# repoURL is a placeholder in the reference build. provision/set-git-source.sh fills it with the
+# in-cluster Gitea or a GitHub URL, and keeps every other Git-sourced Application in step.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-foundation
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    targetRevision: main
+    path: platform/1-foundation
+    directory:
+      recurse: true
+      # Only the per-component Applications. Raw manifests under each component's manifests/ are
+      # owned by that component's own Application.
+      include: "*/application.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

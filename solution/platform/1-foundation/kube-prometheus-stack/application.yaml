@@ -1,0 +1,85 @@
+# ABOUTME: Prometheus, Alertmanager and Grafana. Grafana gets Loki and Tempo as datasources, and
+# ABOUTME: Prometheus selects every ServiceMonitor so golden-path services are scraped unlabelled.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 86.3.2
+    helm:
+      valuesObject:
+        # Kind binds etcd, the scheduler, the controller manager and kube-proxy metrics to
+        # 127.0.0.1 inside the node, so Prometheus cannot reach them and the targets sit down
+        # forever. Disable them rather than ship permanently firing alerts.
+        kubeEtcd:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        prometheus:
+          prometheusSpec:
+            retention: 24h
+            # By default only ServiceMonitors carrying this release's label are selected, so a
+            # golden-path service's ServiceMonitor would be silently ignored and its KEDA trigger
+            # would read zero forever. Select them all.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            # Kind's default StorageClass (local-path).
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+        grafana:
+          enabled: true
+          # Local dev only, ephemeral. Not a real credential.
+          adminPassword: "local-dev-only"
+          grafana.ini:
+            server:
+              root_url: https://grafana.localtest.me
+          # The stack provisions Prometheus and Alertmanager as datasources but not Loki or Tempo.
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              uid: loki
+              access: proxy
+              url: http://loki-gateway.observability.svc
+            - name: Tempo
+              type: tempo
+              uid: tempo
+              access: proxy
+              url: http://tempo.observability.svc:3200
+              jsonData:
+                tracesToLogsV2:
+                  datasourceUid: loki
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

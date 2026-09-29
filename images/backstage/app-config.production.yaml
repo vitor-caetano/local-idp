@@ -1,0 +1,85 @@
+# ABOUTME: The Backstage config baked into the platform image. Hosts and secrets come from env vars
+# ABOUTME: the Helm release injects (see 1-foundation/backstage), never from this file.
+app:
+  title: local-idp
+  baseUrl: ${BACKSTAGE_BASE_URL}
+
+backend:
+  baseUrl: ${BACKSTAGE_BASE_URL}
+  listen:
+    port: 7007
+  cors:
+    origin: ${BACKSTAGE_BASE_URL}
+  database:
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+  # The URL reader refuses hosts not listed here, and the catalog reads the template and org file
+  # from whichever Git source the platform uses.
+  reading:
+    allow:
+      - host: gitea-http.gitea.svc:3000
+      - host: raw.githubusercontent.com
+
+integrations:
+  gitea:
+    - host: ${GITEA_HOST}
+      baseUrl: http://${GITEA_HOST}
+      username: ${GITEA_USERNAME}
+      password: ${GITEA_PASSWORD}
+
+# The ArgoCD plugin reads through the proxy with the read-only backstage account token.
+proxy:
+  endpoints:
+    '/argocd/api':
+      target: ${ARGOCD_URL}/api/v1/
+      changeOrigin: true
+      headers:
+        Cookie: argocd.token=${ARGOCD_AUTH_TOKEN}
+
+kubernetes:
+  serviceLocatorMethod:
+    type: multiTenant
+  clusterLocatorMethods:
+    - type: config
+      clusters:
+        - name: local-idp
+          url: https://kubernetes.default.svc
+          authProvider: serviceAccount
+          serviceAccountToken: ${K8S_SA_TOKEN}
+          skipTLSVerify: true
+          skipMetricsLookup: true
+  customResources:
+    - group: argoproj.io
+      apiVersion: v1alpha1
+      plural: rollouts
+
+techdocs:
+  builder: local
+  generator:
+    runIn: local
+  publisher:
+    type: local
+
+auth:
+  environment: production
+  providers:
+    # Guest sign-in. Right for a single-person laptop cluster, wrong anywhere else.
+    guest:
+      dangerouslyAllowOutsideDevelopment: true
+
+catalog:
+  rules:
+    - allow: [Component, System, API, Resource, Location, Template, Group, User]
+  locations:
+    - type: url
+      target: ${PLATFORM_RAW_BASE}/platform/2-self-service/catalog/org.yaml
+      rules:
+        - allow: [Group, User]
+    - type: url
+      target: ${PLATFORM_RAW_BASE}/platform/2-self-service/go-service/template.yaml
+      rules:
+        - allow: [Template]

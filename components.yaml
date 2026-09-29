@@ -1,0 +1,347 @@
+# components.yaml
+# Single source of truth for the platform component set.
+# Every entry carries a pinned version. scripts/check_components.py fails if any entry lacks one.
+#
+# Pins shared with the EKS sibling platform (Agentic-DevOps-with-Claude-Code) reuse the versions
+# that build validated. Pins new to this platform (Kind, Envoy Gateway, Alloy, BuildKit, the
+# registry) were resolved from upstream on the date below.
+#
+# Schema per component:
+#   name           kebab-case identifier
+#   plane          cluster | foundation | self-service
+#   project_url    upstream project
+#   install_method helm | helm-oci | kubectl | cli | image
+#   chart_repo     chart repository (helm/helm-oci), else null
+#   chart_name     chart name, else null
+#   chart_version  pinned chart version, else null
+#   app_version    pinned application/image version
+#   namespace      target namespace, or null for things that run outside the cluster
+#   phase          build phase the component lands in
+#   notes          integration notes worth knowing before touching it
+
+metadata:
+  resolved_on: "2026-09-29"
+  platform: kind
+  kubernetes_version: "1.36"
+
+components:
+
+  # --- Cluster: runs on your machine, outside ArgoCD ---
+  - name: kind
+    display_name: "Kind"
+    plane: cluster
+    project_url: https://kind.sigs.k8s.io
+    install_method: cli
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "v0.33.0"
+    namespace: null
+    phase: 0
+    notes: "Node image pinned by digest in provision/kind-config.yaml."
+
+  - name: kind-node
+    display_name: "Kind node image"
+    plane: cluster
+    project_url: https://hub.docker.com/r/kindest/node
+    install_method: image
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
+    namespace: null
+    phase: 0
+    notes: "The digest listed in the Kind v0.33.0 release notes for Kubernetes 1.36."
+
+  - name: local-registry
+    display_name: "Local image registry"
+    plane: cluster
+    project_url: https://distribution.github.io/distribution/
+    install_method: image
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "registry:3.1.2"
+    namespace: null
+    phase: 0
+    notes: "Container kind-registry on the kind docker network. localhost:5001 from the host and from node containerd, kind-registry:5000 from pods."
+
+  # --- Foundation: GitOps and Git ---
+  - name: argo-cd
+    display_name: "Argo CD"
+    plane: foundation
+    project_url: https://argo-cd.readthedocs.io
+    install_method: helm
+    chart_repo: https://argoproj.github.io/argo-helm
+    chart_name: argo-cd
+    chart_version: "9.5.22"
+    app_version: "v3.4.4"
+    namespace: argocd
+    phase: 1
+    notes: "The one direct install. server.insecure, TLS terminates at the Gateway."
+
+  - name: gitea
+    display_name: "Gitea"
+    plane: foundation
+    project_url: https://gitea.com
+    install_method: helm
+    chart_repo: https://dl.gitea.com/charts/
+    chart_name: gitea
+    chart_version: "12.6.0"
+    app_version: "1.26.1"
+    namespace: gitea
+    phase: 1
+    notes: "SQLite, one replica. Applied directly by seed-gitea.sh, then adopted by ArgoCD."
+
+  # --- Foundation: traffic and TLS ---
+  - name: cert-manager
+    display_name: "cert-manager"
+    plane: foundation
+    project_url: https://cert-manager.io
+    install_method: helm
+    chart_repo: https://charts.jetstack.io
+    chart_name: cert-manager
+    chart_version: "v1.20.2"
+    app_version: "v1.20.2"
+    namespace: cert-manager
+    phase: 1
+    notes: "Self-signed root, then a CA ClusterIssuer that signs the *.localtest.me wildcard."
+
+  - name: envoy-gateway
+    display_name: "Envoy Gateway"
+    plane: foundation
+    project_url: https://gateway.envoyproxy.io
+    install_method: helm-oci
+    chart_repo: oci://docker.io/envoyproxy
+    chart_name: gateway-helm
+    chart_version: "1.9.2"
+    app_version: "v1.9.2"
+    namespace: envoy-gateway-system
+    phase: 1
+    notes: "Installs the Gateway API CRDs it supports. Envoy Service is NodePort 30080/30443 via EnvoyProxy."
+
+  # --- Foundation: secrets and policy ---
+  - name: openbao
+    display_name: "OpenBao"
+    plane: foundation
+    project_url: https://openbao.org
+    install_method: helm
+    chart_repo: https://openbao.github.io/openbao-helm
+    chart_name: openbao
+    chart_version: "0.28.4"
+    app_version: "v2.5.5"
+    namespace: openbao
+    phase: 2
+    notes: "Dev mode: in-memory, unsealed, fixed root token. Never production."
+
+  - name: external-secrets
+    display_name: "External Secrets Operator"
+    plane: foundation
+    project_url: https://external-secrets.io
+    install_method: helm
+    chart_repo: https://charts.external-secrets.io
+    chart_name: external-secrets
+    chart_version: "2.6.0"
+    app_version: "v2.6.0"
+    namespace: external-secrets
+    phase: 2
+    notes: "external-secrets.io/v1. The vault provider drives OpenBao unchanged."
+
+  - name: kyverno
+    display_name: "Kyverno"
+    plane: foundation
+    project_url: https://kyverno.io
+    install_method: helm
+    chart_repo: https://kyverno.github.io/kyverno
+    chart_name: kyverno
+    chart_version: "3.8.1"
+    app_version: "v1.18.1"
+    namespace: kyverno
+    phase: 2
+    notes: "Every policy ships Audit. Rule-level validate.failureAction."
+
+  # --- Foundation: observability ---
+  - name: kube-prometheus-stack
+    display_name: "kube-prometheus-stack"
+    plane: foundation
+    project_url: https://github.com/prometheus-community/helm-charts
+    install_method: helm
+    chart_repo: https://prometheus-community.github.io/helm-charts
+    chart_name: kube-prometheus-stack
+    chart_version: "86.3.2"
+    app_version: "operator v0.91.0"
+    namespace: observability
+    phase: 3
+    notes: "Selects every ServiceMonitor, not only the release-labelled ones."
+
+  - name: loki
+    display_name: "Loki"
+    plane: foundation
+    project_url: https://grafana.com/oss/loki/
+    install_method: helm
+    chart_repo: https://grafana-community.github.io/helm-charts
+    chart_name: loki
+    chart_version: "17.4.7"
+    app_version: "3.7.2"
+    namespace: observability
+    phase: 3
+    notes: "SingleBinary, filesystem storage."
+
+  - name: alloy
+    display_name: "Grafana Alloy"
+    plane: foundation
+    project_url: https://grafana.com/oss/alloy/
+    install_method: helm
+    chart_repo: https://grafana.github.io/helm-charts
+    chart_name: alloy
+    chart_version: "1.13.0"
+    app_version: "v1.20.0"
+    namespace: observability
+    phase: 3
+    notes: "Ships pod logs to Loki. Replaces Promtail, which is deprecated."
+
+  - name: tempo
+    display_name: "Tempo"
+    plane: foundation
+    project_url: https://grafana.com/oss/tempo/
+    install_method: helm
+    chart_repo: https://grafana-community.github.io/helm-charts
+    chart_name: tempo
+    chart_version: "1.25.0"
+    app_version: "2.9.0"
+    namespace: observability
+    phase: 3
+    notes: "Held at 1.25.0: grafana/tempo#6436 makes flushed blocks unsearchable on the 2.10 line."
+
+  - name: opentelemetry-collector
+    display_name: "OTel Collector"
+    plane: foundation
+    project_url: https://opentelemetry.io/docs/collector/
+    install_method: helm
+    chart_repo: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart_name: opentelemetry-collector
+    chart_version: "0.158.2"
+    app_version: "0.153.0"
+    namespace: observability
+    phase: 3
+    notes: "Deployment mode. OTLP in, Tempo out."
+
+  # --- Foundation: delivery and automation ---
+  - name: argo-workflows
+    display_name: "Argo Workflows"
+    plane: foundation
+    project_url: https://argoproj.github.io/workflows/
+    install_method: helm
+    chart_repo: https://argoproj.github.io/argo-helm
+    chart_name: argo-workflows
+    chart_version: "1.0.16"
+    app_version: "v4.0.6"
+    namespace: argo
+    phase: 4
+    notes: "Server auth mode for local use. Watches the ci namespace."
+
+  - name: argo-events
+    display_name: "Argo Events"
+    plane: foundation
+    project_url: https://argoproj.github.io/events/
+    install_method: helm
+    chart_repo: https://argoproj.github.io/argo-helm
+    chart_name: argo-events
+    chart_version: "2.4.22"
+    app_version: "v1.9.10"
+    namespace: argo-events
+    phase: 4
+    notes: "The chart installs no EventBus. The CI pipeline declares a JetStream one."
+
+  - name: argo-rollouts
+    display_name: "Argo Rollouts"
+    plane: foundation
+    project_url: https://argoproj.github.io/rollouts/
+    install_method: helm
+    chart_repo: https://argoproj.github.io/argo-helm
+    chart_name: argo-rollouts
+    chart_version: "2.41.0"
+    app_version: "v1.9.0"
+    namespace: argo-rollouts
+    phase: 4
+    notes: "Replica-weighted canary. No traffic-router plugin."
+
+  - name: keda
+    display_name: "KEDA"
+    plane: foundation
+    project_url: https://keda.sh
+    install_method: helm
+    chart_repo: https://kedacore.github.io/charts
+    chart_name: keda
+    chart_version: "2.20.1"
+    app_version: "2.20.1"
+    namespace: keda
+    phase: 4
+    notes: "Prometheus trigger. Kind has no metrics-server, so CPU triggers do not work."
+
+  # --- Foundation: portal ---
+  - name: backstage
+    display_name: "Backstage"
+    plane: foundation
+    project_url: https://backstage.io
+    install_method: helm
+    chart_repo: https://backstage.github.io/charts
+    chart_name: backstage
+    chart_version: "2.8.2"
+    app_version: "1.51.2"
+    namespace: backstage
+    phase: 5
+    notes: "Custom image built by images/backstage/build-and-push.sh into localhost:5001."
+
+  - name: backstage-postgres
+    display_name: "PostgreSQL for Backstage"
+    plane: foundation
+    project_url: https://www.postgresql.org
+    install_method: kubectl
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "postgres:17.6"
+    namespace: backstage
+    phase: 5
+    notes: "Plain StatefulSet. Password comes from OpenBao through an ExternalSecret."
+
+  # --- Self-service: the golden path ---
+  - name: buildkit
+    display_name: "BuildKit (rootless)"
+    plane: self-service
+    project_url: https://github.com/moby/buildkit
+    install_method: image
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "moby/buildkit:v0.33.0-rootless"
+    namespace: ci
+    phase: 6
+    notes: "Builds service images in the CI workflow. Needs seccomp and AppArmor Unconfined."
+
+  - name: golang
+    display_name: "Go toolchain image"
+    plane: self-service
+    project_url: https://go.dev
+    install_method: image
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "golang:1.27.0"
+    namespace: ci
+    phase: 6
+    notes: "Used for clone, test and the tag bump. Ships git."
+
+  - name: go-service-template
+    display_name: "Go service golden path"
+    plane: self-service
+    project_url: https://backstage.io/docs/features/software-templates/
+    install_method: kubectl
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "scaffolder.backstage.io/v1beta3"
+    namespace: backstage
+    phase: 6
+    notes: "Publishes to the services org in Gitea. Standard library only, so there is no go.sum to manage."

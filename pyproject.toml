@@ -1,0 +1,20 @@
+# ABOUTME: Root pytest configuration. Scopes a bare `pytest` to the platform suite.
+# ABOUTME: Cluster-bound tests skip themselves when KUBECONFIG_FILE is unset.
+[project]
+name = "local-idp"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git", "*.egg-info", "images"]
+markers = [
+    "integration: needs a fully built cluster and in-cluster traffic",
+]
+
+# `uv run --group test pytest` installs these and runs everything.
+[dependency-groups]
+test = [
+    "pytest>=8.0",
+    "pyyaml>=6.0",
+]

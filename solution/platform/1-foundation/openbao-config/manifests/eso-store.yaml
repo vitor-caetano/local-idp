@@ -1,0 +1,35 @@
+# ABOUTME: The ClusterSecretStore every ExternalSecret on the platform uses, plus the dev token it
+# ABOUTME: authenticates with. OpenBao speaks the Vault API, so ESO's vault provider drives it.
+#
+# The token is OpenBao's fixed dev root token (it matches devRootToken in the openbao Application),
+# not a real credential. In production you would enable OpenBao Kubernetes auth and drop it.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openbao-root-token
+  namespace: openbao
+  labels:
+    app.kubernetes.io/part-of: local-idp
+type: Opaque
+stringData:
+  token: "root"
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: openbao
+  labels:
+    app.kubernetes.io/part-of: local-idp
+spec:
+  provider:
+    vault:
+      server: "http://openbao.openbao.svc:8200"
+      # KV v2 is mounted at secret/ by the dev server.
+      path: "secret"
+      version: "v2"
+      auth:
+        tokenSecretRef:
+          name: openbao-root-token
+          key: token
+          namespace: openbao

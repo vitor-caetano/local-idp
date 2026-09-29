@@ -1,0 +1,56 @@
+# ABOUTME: Argo Workflows. Runs the golden-path CI pipeline in the ci namespace. Server auth mode,
+# ABOUTME: so the UI at https://workflows.localtest.me opens without a token on a laptop cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-workflows
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-workflows
+    targetRevision: 1.0.16
+    helm:
+      valuesObject:
+        # v4 ships full-validation CRDs that exceed the client-side apply annotation limit;
+        # ServerSideApply below handles them.
+        crds:
+          install: true
+        controller:
+          replicas: 1
+          # Workflows run only in ci. The chart creates the workflow service account and its RBAC
+          # (including workflowtaskresults, which the v3.4+ executor needs) in these namespaces.
+          workflowNamespaces:
+            - ci
+        workflow:
+          serviceAccount:
+            create: true
+            name: ci-runner
+          rbac:
+            create: true
+        server:
+          # Server mode uses the server's own service account for every UI request. Correct for a
+          # single-person local cluster, never for a shared one.
+          authModes:
+            - server
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,45 @@
+# ABOUTME: Tempo, single binary. Receives traces from the OpenTelemetry Collector over OTLP and
+# ABOUTME: serves them to Grafana on 3200. No persistence: a restart empties the trace store.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana-community.github.io/helm-charts
+    chart: tempo
+    # Held at 1.25.0 (app 2.9.0): grafana/tempo#6436 makes flushed blocks unsearchable in
+    # standalone mode on the 2.10 line.
+    targetRevision: 1.25.0
+    helm:
+      valuesObject:
+        tempo:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
