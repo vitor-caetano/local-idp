@@ -18,6 +18,7 @@ No cloud account, no AI plane, no cost to run.
 
 ## Start here
 
+0. `STATUS.md`: where the build stands and what to do next
 1. `docs/prerequisites.md`: tools, and the Docker VM size (16 GB, 6 CPUs)
 2. `provision/README.md`: creating and tearing down the cluster
 3. `spec/BUILD-SPEC.md`: the build, phase by phase
