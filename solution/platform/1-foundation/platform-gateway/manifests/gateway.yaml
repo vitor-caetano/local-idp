@@ -16,6 +16,10 @@ spec:
     kubernetes:
       envoyService:
         type: NodePort
+        # Kind maps host ports 80 and 443 onto the control-plane node only, and the Envoy pod lands on a
+        # worker. With the default Local policy, a node without an Envoy pod drops external NodePort
+        # traffic, so the host sees a timeout. Cluster forwards it to the pod on whichever node.
+        externalTrafficPolicy: Cluster
         patch:
           type: StrategicMerge
           value:
