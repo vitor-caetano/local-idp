@@ -72,8 +72,9 @@ spec:
       name: Register in the catalog
       action: catalog:register
       input:
-        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
-        catalogInfoPath: /catalog-info.yaml
+        # Built explicitly: publish:gitea's repoContentsUrl output drops the branch
+        # (.../src/branch/catalog-info.yaml), and the catalog rejects that URL with 400.
+        catalogInfoUrl: http://gitea-http.gitea.svc:3000/services/${{ parameters.name }}/src/branch/main/catalog-info.yaml
 
   output:
     links:
