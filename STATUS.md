@@ -4,7 +4,13 @@ Where the build stands. Update this file when a phase completes.
 
 ## As of 2026-09-30
 
-**Phase 5 done.** `tests/test_phase_5_portal.py` passes (4 of 4). The foundation is complete: every
+**Phase 6 done.** `tests/test_phase_6_golden_path.py` passes (9 of 9), and phases 1 to 5 still pass
+(26 of 26). `hello-go` was scaffolded in Backstage, built by `ci-go-service` in about 50 seconds,
+and deployed as `svc-hello-go`; `https://hello-go.localtest.me/` answers `hello from hello-go`. All 30
+Applications are Synced and Healthy. The loop guard holds: two push events, one Workflow, because
+the Sensor's `comparator: "!="` drops the pipeline's `[skip ci]` commit.
+
+**Phase 5.** `tests/test_phase_5_portal.py` passes (4 of 4). The foundation is complete: every
 UI answers over HTTPS with the local CA. The catalog check called the Backstage API with no
 credentials, which the new backend refuses (401). It now signs in as guest first, the way the
 browser does. The platform needed no change.
@@ -40,12 +46,12 @@ Tools come from `devbox.json` (see `docs/prerequisites.md`).
 | 3 Observability | Done 2026-09-30 |
 | 4 Delivery and automation | Done 2026-09-30 |
 | 5 Developer portal | Done 2026-09-30 |
-| 6 to 7 | Not started |
+| 6 Golden path | Done 2026-09-30 |
+| 7 Governance | Not started |
 
 ## Next steps
 
-1. Start phase 6: `spec/phases/phase-6-golden-path.md`. Apply `platform/0-bootstrap/self-service-app.yaml`
-   first.
+1. Start phase 7: `spec/phases/phase-7-governance.md`.
 2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
    restart.
 
@@ -56,8 +62,7 @@ fix the pin in `components.yaml` and the Application, then run `scripts/gen-vers
 
 | Item | Where it bites |
 |---|---|
-| BuildKit v0.33.0 rootless | Phase 6 |
-| The Sensor's `comparator: "!="` on a string filter, and the Gitea push payload keys | Phase 6 |
+| Nothing left. BuildKit rootless, the Sensor filter and the Gitea payload keys were proven in phase 6. | |
 
 Components shared with the EKS sibling platform (ArgoCD, Gitea, cert-manager, OpenBao, ESO,
 Kyverno, the observability charts, the Argo charts, KEDA, Backstage) reuse pins that build validated.
@@ -80,6 +85,28 @@ Backstage fixes are in the shared `images/backstage/build-and-push.sh`.
 - **The host timed out on port 80.** Envoy Gateway defaults the Service to
   `externalTrafficPolicy: Local`, and Kind maps host ports onto the control plane while Envoy runs on
   a worker. The EnvoyProxy now sets `Cluster`.
+
+## Fixed during phase 6
+
+Each is mirrored in `solution/`. Phase 5's API test could not catch the Backstage ones, because it
+never loads the UI or runs a template.
+
+- **Backstage UI crashed** with `No implementation available for apiRef{plugin.notifications.service}`.
+  The pod loads `app-config.production.yaml` alone, which lacked `app.packages: all`, so the new
+  frontend system installed only the catalog. Added it, and registered the notifications, signals
+  and search backends the discovered plugins call. Image 0.1.1.
+- **Every template task failed at step one.** The scaffolder needs `NODE_OPTIONS=--no-node-snapshot`
+  on Node 20+; the platform Dockerfile had dropped it. Image 0.1.2.
+- **`publish:gitea` requires `description`.** The form field is optional; it now has a default and a
+  fallback.
+- **`catalog:register` got a 400.** `publish:gitea`'s `repoContentsUrl` drops the branch. The
+  template now passes an explicit `catalogInfoUrl`.
+- **The Sensor could not submit.** `ci-sensor` lacked `get` on `workflowtemplates`.
+- **`svc-<name>` was InvalidSpecError.** The SCM generator's `.url` is the SSH URL
+  (`git@git.example.com:...`) by default. The ApplicationSet now sets `cloneProtocol: https`.
+- **`svc-hello-go` read OutOfSync.** The skeleton omitted API defaults: the HTTPRoute's (fixed before
+  the scaffold) and the Rollout's `ports[].protocol` (fixed in the skeleton and, with a `[skip ci]`
+  commit, in the `hello-go` repo).
 
 ## Known open items
 
