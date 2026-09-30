@@ -12,7 +12,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
+    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
     targetRevision: main
     path: platform/1-foundation/policy-baseline/manifests
     directory:

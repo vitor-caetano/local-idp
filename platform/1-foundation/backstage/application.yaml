@@ -43,7 +43,7 @@ spec:
             # Where the catalog reads the golden-path template and the org file from. Set by
             # provision/set-git-source.sh together with every Application's repoURL.
             - name: PLATFORM_RAW_BASE
-              value: REPLACE_WITH_PLATFORM_RAW_BASE
+              value: http://gitea-http.gitea.svc:3000/platform/local-idp/raw/branch/main
             - name: K8S_SA_TOKEN
               valueFrom:
                 secretKeyRef:
