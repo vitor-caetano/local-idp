@@ -35,6 +35,7 @@ spec:
           title: Description
           type: string
           description: One line on what this service does.
+          default: A Go HTTP service from the golden path.
         owner:
           title: Owner
           type: string
@@ -62,7 +63,8 @@ spec:
       action: publish:gitea
       input:
         repoUrl: gitea-http.gitea.svc:3000?owner=services&repo=${{ parameters.name }}
-        description: ${{ parameters.description }}
+        # publish:gitea requires a description, and a cleared form field arrives as nothing.
+        description: ${{ parameters.description or "A Go HTTP service from the golden path." }}
         repoVisibility: public
         defaultBranch: main
 
