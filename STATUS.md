@@ -4,7 +4,10 @@ Where the build stands. Update this file when a phase completes.
 
 ## As of 2026-09-30
 
-**Phase 3 done.** `tests/test_phase_3_observability.py` passes (5 of 5). The observability stack
+**Phase 4 done.** `tests/test_phase_4_delivery_and_automation.py` passes (5 of 5) with no
+changes: Argo Workflows, Events, Rollouts, KEDA and the `gitea-config` seed had converged already.
+
+**Phase 3.** `tests/test_phase_3_observability.py` passes (5 of 5). The observability stack
 needed no changes. The test harness did: `incluster_curl` ran `kubectl run --rm -i`, and kubectl
 1.36 streams a fast pod's output twice (attach plus the logs fallback), so JSON bodies failed to
 parse. It now runs the pod detached and reads its logs once.
@@ -30,11 +33,12 @@ Tools come from `devbox.json` (see `docs/prerequisites.md`).
 | 1 GitOps and traffic | Done 2026-09-30 |
 | 2 Secrets and policy | Done 2026-09-30 |
 | 3 Observability | Done 2026-09-30 |
-| 4 to 7 | Not started |
+| 4 Delivery and automation | Done 2026-09-30 |
+| 5 to 7 | Not started |
 
 ## Next steps
 
-1. Start phase 4: `spec/phases/phase-4-delivery-and-automation.md`. Its components are already synced.
+1. Start phase 5: `spec/phases/phase-5-portal.md`. Its components are already synced.
 2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
    restart.
 
