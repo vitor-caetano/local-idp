@@ -45,7 +45,7 @@ Tools come from `devbox.json` (see `docs/prerequisites.md`).
 ## Next steps
 
 1. Start phase 6: `spec/phases/phase-6-golden-path.md`. Apply `platform/0-bootstrap/self-service-app.yaml`
-   first. Decide the skeleton HTTPRoute's defaults (see Known open items).
+   first.
 2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
    restart.
 
@@ -56,8 +56,6 @@ fix the pin in `components.yaml` and the Application, then run `scripts/gen-vers
 
 | Item | Where it bites |
 |---|---|
-| Grafana Alloy chart 1.13.0 and its config | Phase 3 |
-| Argo Workflows chart 1.0.16 values keys (`workflowNamespaces`, `workflow.serviceAccount`) | Phase 4 |
 | BuildKit v0.33.0 rootless | Phase 6 |
 | The Sensor's `comparator: "!="` on a string filter, and the Gitea push payload keys | Phase 6 |
 
@@ -84,10 +82,6 @@ Backstage fixes are in the shared `images/backstage/build-and-push.sh`.
   a worker. The EnvoyProxy now sets `Cluster`.
 
 ## Known open items
-
-- The golden-path skeleton's HTTPRoute (`2-self-service/go-service/skeleton`) omits the same API
-  defaults and will read OutOfSync. It is left alone until phase 6, because Argo Rollouts may own
-  its backend weights.
 
 - The Backstage ArgoCD and Kubernetes tabs are installed but not wired into the entity page. See
   `images/backstage/README.md`.
