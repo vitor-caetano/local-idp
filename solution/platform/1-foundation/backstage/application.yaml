@@ -23,7 +23,7 @@ spec:
             # registry/repository:tag, so repository must not repeat the host (defect class 3).
             registry: localhost:5001
             repository: local-idp/backstage
-            tag: "0.1.1"
+            tag: "0.1.2"
             pullPolicy: IfNotPresent
           # The image's app-config.production.yaml is a complete config; load it alone.
           args:

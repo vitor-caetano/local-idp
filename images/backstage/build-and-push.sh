@@ -13,7 +13,7 @@ readonly REGISTRY="localhost:5001"
 readonly IMAGE_REPO="local-idp/backstage"
 
 # Must match backstage.image.tag in solution/platform/1-foundation/backstage/application.yaml.
-TAG="${TAG:-0.1.1}"
+TAG="${TAG:-0.1.2}"
 # The pinned Backstage release (components.yaml: backstage app_version), the create-app version that
 # ships it, and the plugin versions from the same release manifest.
 readonly BACKSTAGE_RELEASE="1.51.2"

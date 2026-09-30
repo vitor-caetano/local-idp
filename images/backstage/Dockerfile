@@ -3,6 +3,9 @@
 FROM node:24-trixie-slim
 
 ENV NODE_ENV=production
+# The scaffolder backend refuses to run templates on Node 20+ without this, and every template task
+# fails at its first step. The create-app Dockerfile sets it too.
+ENV NODE_OPTIONS="--no-node-snapshot"
 
 # isolated-vm (scaffolder backend) needs a toolchain for the production install.
 RUN apt-get update && apt-get install -y --no-install-recommends \
