@@ -49,3 +49,32 @@ git_source_mode() {
         echo "github"
     fi
 }
+
+# --- The local root CA in the macOS login keychain ------------------------------------------------
+# The login keychain needs no sudo; trusting a root there prompts once for your password in a macOS
+# dialog. Every cluster generates a new CA under the same name, so a stale one is removed first.
+CA_COMMON_NAME="local-idp-root-ca"
+LOGIN_KEYCHAIN="${HOME}/Library/Keychains/login.keychain-db"
+
+# Removes every local-idp-root-ca from the login keychain, with its trust settings (-t).
+untrust_ca() {
+    [[ "$(uname -s)" == "Darwin" ]] || return 0
+    local removed=0
+    while security find-certificate -c "${CA_COMMON_NAME}" "${LOGIN_KEYCHAIN}" >/dev/null 2>&1; do
+        security delete-certificate -t -c "${CA_COMMON_NAME}" "${LOGIN_KEYCHAIN}" >/dev/null || break
+        removed=$((removed + 1))
+    done
+    (( removed == 0 )) || log "Removed ${removed} ${CA_COMMON_NAME} certificate(s) from the login keychain"
+    if security find-certificate -c "${CA_COMMON_NAME}" /Library/Keychains/System.keychain >/dev/null 2>&1; then
+        log "A ${CA_COMMON_NAME} is also in the System keychain. Removing it needs sudo:"
+        log "    sudo security delete-certificate -t -c ${CA_COMMON_NAME} /Library/Keychains/System.keychain"
+    fi
+}
+
+# Trusts the given CA file as a root in the login keychain, replacing any earlier one.
+trust_ca() {
+    [[ "$(uname -s)" == "Darwin" ]] || die "keychain trust is macOS only; use the exported file directly"
+    untrust_ca
+    log "Trusting $1 in the login keychain (macOS asks for your password)"
+    security add-trusted-cert -r trustRoot -k "${LOGIN_KEYCHAIN}" "$1"
+}

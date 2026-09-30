@@ -10,7 +10,7 @@ reachable at `https://<name>.localtest.me`. That completes the foundation.
   read-only ClusterRole
 - `backstage` Synced and Healthy
 - `platform-routes`: HTTPRoutes for argocd, gitea, grafana, workflows, backstage
-- The local CA exported with `./provision/trust-ca.sh` and trusted in your keychain (optional, for
+- The local CA exported and trusted with `./provision/trust-ca.sh --install` (optional, for
   the browser)
 
 **Test criteria (`tests/test_phase_5_portal.py`):**

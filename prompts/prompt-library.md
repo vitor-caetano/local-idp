@@ -58,7 +58,7 @@ StatefulSet's `envFrom`.
 
 ## Phase 5: portal
 
-> Export the local CA with `./provision/trust-ca.sh`, then run the phase 5 test. Open Backstage and
+> Trust the local CA with `./provision/trust-ca.sh --install`, then run the phase 5 test. Open Backstage and
 > find the Go service template.
 
 ## Phase 6: golden path

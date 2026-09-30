@@ -11,7 +11,7 @@ Scripts that create, bootstrap and destroy the local cluster. Every script sourc
 | `bootstrap-argocd.sh` | Helm-installs ArgoCD at the pinned version with `platform/0-bootstrap/argocd-values.yaml` |
 | `seed-gitea.sh` | Installs Gitea, derives its seed credentials, pushes your tree (Gitea mode), applies the foundation root |
 | `push-to-cluster.sh` | Pushes your latest commit to the in-cluster Gitea through a port-forward |
-| `trust-ca.sh` | Exports the local root CA and prints the command to trust it |
+| `trust-ca.sh` | Exports the local root CA. `--install` trusts it in your login keychain (no sudo), `--remove` takes it out. `destroy.sh` removes it too |
 | `destroy.sh [--keep-registry]` | Deletes the cluster and the registry. `--keep-registry` keeps built images for the next run |
 
 ## Order

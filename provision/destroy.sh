@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ABOUTME: Deletes the Kind cluster and, unless --keep-registry is given, the registry container.
-# ABOUTME: Keeping the registry keeps the Backstage image, so the next build skips that step.
+# ABOUTME: Keeping the registry keeps the Backstage image, so the next build skips that step. Also
+# ABOUTME: removes the cluster's root CA from the login keychain, where trust-ca.sh --install put it.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -25,4 +26,8 @@ fi
 
 # The cluster remote points at a Gitea that no longer exists.
 git -C "${REPO_ROOT}" remote remove cluster 2>/dev/null || true
+
+# The next cluster generates a new CA, so a trusted copy of this one is only stale trust.
+untrust_ca
+rm -f "${REPO_ROOT}/provision/local-idp-ca.crt"
 log "Done."
