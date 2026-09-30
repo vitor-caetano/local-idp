@@ -9,7 +9,7 @@ PATH="$(brew --prefix node@24)/bin:${PATH}" ./images/backstage/build-and-push.sh
 
 It scaffolds a Backstage app with `@backstage/create-app` into `backstage-app/` (gitignored), adds
 the plugins below, copies in `overlay/` and `app-config.production.yaml`, builds the backend bundle
-on your machine, and builds and pushes `localhost:5001/local-idp/backstage:0.1.0`. Delete
+on your machine, and builds and pushes `localhost:5001/local-idp/backstage:0.1.1`. Delete
 `backstage-app/` to rescaffold from scratch.
 
 | Plugin | Side | Why |

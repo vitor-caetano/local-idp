@@ -31,6 +31,15 @@ backend.add(import('@backstage/plugin-techdocs-backend'));
 backend.add(import('@backstage/plugin-auth-backend'));
 backend.add(import('@backstage/plugin-auth-backend-module-guest-provider'));
 
+// The frontend discovers every plugin in packages/app (app.packages: all), and the scaffold's
+// sidebar, search and scaffolder call these. Without them the app shell fails to render.
+backend.add(import('@backstage/plugin-notifications-backend'));
+backend.add(import('@backstage/plugin-signals-backend'));
+backend.add(import('@backstage/plugin-search-backend'));
+backend.add(import('@backstage/plugin-search-backend-module-pg'));
+backend.add(import('@backstage/plugin-search-backend-module-catalog'));
+backend.add(import('@backstage/plugin-search-backend-module-techdocs'));
+
 // Permissions, allow-all
 backend.add(import('@backstage/plugin-permission-backend'));
 backend.add(

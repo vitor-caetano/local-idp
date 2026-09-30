@@ -3,6 +3,11 @@
 app:
   title: local-idp
   baseUrl: ${BACKSTAGE_BASE_URL}
+  # The new frontend system installs only the features App.tsx lists (the catalog) unless discovery
+  # is on. The scaffold's sidebar renders the notifications item regardless, so with discovery off
+  # the app fails with "No implementation available for apiRef{plugin.notifications.service}", and
+  # the scaffolder's Create page is missing. The pod loads this file alone, so it must be here.
+  packages: all
 
 backend:
   baseUrl: ${BACKSTAGE_BASE_URL}

@@ -4,7 +4,7 @@
 reachable at `https://<name>.localtest.me`. That completes the foundation.
 
 **Outputs:**
-- `localhost:5001/local-idp/backstage:0.1.0`, built in phase 1 by `images/backstage/build-and-push.sh`
+- `localhost:5001/local-idp/backstage:0.1.1`, built in phase 1 by `images/backstage/build-and-push.sh`
   (this phase is where you open it and check it, and where you rebuild it if you add plugins)
 - `backstage-config`: Postgres with credentials from OpenBao, the Backstage service account and its
   read-only ClusterRole
