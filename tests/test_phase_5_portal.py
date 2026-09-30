@@ -5,6 +5,7 @@ import json
 from conftest import assert_apps_healthy, get_json, host_curl, incluster_curl, local_ca_file
 
 HOSTS = ["argocd", "gitea", "grafana", "workflows", "backstage"]
+BACKSTAGE = "http://backstage.backstage.svc:7007"
 
 
 def test_portal_apps_healthy():
@@ -36,8 +37,17 @@ def test_every_ui_answers_over_https():
 
 
 def test_catalog_has_the_golden_path():
+    # The backend refuses unauthenticated calls. Sign in as guest, the way the browser does.
     body, code = incluster_curl(
-        "http://backstage.backstage.svc:7007/api/catalog/entities/by-query",
+        f"{BACKSTAGE}/api/auth/guest/refresh?optional&env=production",
+        "-H", "X-Requested-With: XMLHttpRequest", ns="backstage",
+    )
+    assert code == "200", f"guest sign-in failed: {body}"
+    token = json.loads(body)["backstageIdentity"]["token"]
+
+    body, code = incluster_curl(
+        f"{BACKSTAGE}/api/catalog/entities/by-query",
+        "-H", f"Authorization: Bearer {token}",
         "--get", "--data-urlencode", "filter=kind=template,kind=group", ns="backstage",
     )
     assert code == "200", body

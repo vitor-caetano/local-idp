@@ -4,7 +4,12 @@ Where the build stands. Update this file when a phase completes.
 
 ## As of 2026-09-30
 
-**Phase 4 done.** `tests/test_phase_4_delivery_and_automation.py` passes (5 of 5) with no
+**Phase 5 done.** `tests/test_phase_5_portal.py` passes (4 of 4). The foundation is complete: every
+UI answers over HTTPS with the local CA. The catalog check called the Backstage API with no
+credentials, which the new backend refuses (401). It now signs in as guest first, the way the
+browser does. The platform needed no change.
+
+**Phase 4.** `tests/test_phase_4_delivery_and_automation.py` passes (5 of 5) with no
 changes: Argo Workflows, Events, Rollouts, KEDA and the `gitea-config` seed had converged already.
 
 **Phase 3.** `tests/test_phase_3_observability.py` passes (5 of 5). The observability stack
@@ -34,11 +39,13 @@ Tools come from `devbox.json` (see `docs/prerequisites.md`).
 | 2 Secrets and policy | Done 2026-09-30 |
 | 3 Observability | Done 2026-09-30 |
 | 4 Delivery and automation | Done 2026-09-30 |
-| 5 to 7 | Not started |
+| 5 Developer portal | Done 2026-09-30 |
+| 6 to 7 | Not started |
 
 ## Next steps
 
-1. Start phase 5: `spec/phases/phase-5-portal.md`. Its components are already synced.
+1. Start phase 6: `spec/phases/phase-6-golden-path.md`. Apply `platform/0-bootstrap/self-service-app.yaml`
+   first. Decide the skeleton HTTPRoute's defaults (see Known open items).
 2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
    restart.
 
