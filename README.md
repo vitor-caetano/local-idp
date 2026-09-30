@@ -22,6 +22,7 @@ No cloud account, no AI plane, no cost to run.
 1. `docs/prerequisites.md`: tools, and the Docker VM size (16 GB, 6 CPUs)
 2. `provision/README.md`: creating and tearing down the cluster
 3. `spec/BUILD-SPEC.md`: the build, phase by phase
+4. `docs/opening-the-uis.md`: the UI URLs, and how to sign in to ArgoCD and the rest
 
 `solution/platform/` is the finished build, for comparing against rather than copying blind.
 `AGENTS.md` is the project memory your agent reads.
