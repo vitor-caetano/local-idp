@@ -4,7 +4,14 @@ Where the build stands. Update this file when a phase completes.
 
 ## As of 2026-09-30
 
-**Phase 6 done.** `tests/test_phase_6_golden_path.py` passes (9 of 9), and phases 1 to 5 still pass
+**Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and
+phase 6 still passes (9 of 9) under enforcement. The three `golden-path-*` ClusterPolicies are
+`Enforce` in `platform/` (commit `ba48201`); `policy-baseline` stays `Audit`, and `solution/` keeps
+shipping `Audit` as `tests/test_policies.py` requires. `scripts/denial-demo.sh` shows a
+`docker.io/library/nginx:latest` Pod denied in `apps` by all three policies and admitted in
+`default`. A new `hello-go` commit (`cab55269`) built and rolled out as a canary under enforcement.
+
+**Phase 6.** `tests/test_phase_6_golden_path.py` passes (9 of 9), and phases 1 to 5 still pass
 (26 of 26). `hello-go` was scaffolded in Backstage, built by `ci-go-service` in about 50 seconds,
 and deployed as `svc-hello-go`; `https://hello-go.localtest.me/` answers `hello from hello-go`. All 30
 Applications are Synced and Healthy. The loop guard holds: two push events, one Workflow, because
@@ -47,11 +54,12 @@ Tools come from `devbox.json` (see `docs/prerequisites.md`).
 | 4 Delivery and automation | Done 2026-09-30 |
 | 5 Developer portal | Done 2026-09-30 |
 | 6 Golden path | Done 2026-09-30 |
-| 7 Governance | Not started |
+| 7 Governance | Done 2026-09-30 |
 
 ## Next steps
 
-1. Start phase 7: `spec/phases/phase-7-governance.md`.
+1. Nothing is required. To rebuild from scratch, `./provision/destroy.sh` and start at phase 0; the
+   fixes recorded below are all in Git.
 2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
    restart.
 
