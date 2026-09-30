@@ -50,6 +50,29 @@ git_source_mode() {
     fi
 }
 
+# --- inotify limits in the Docker VM --------------------------------------------------------------
+# Many controllers on one kernel exhaust the default inotify instances (128), and pods then crash with
+# "too many open files". kube-proxy is the costly one: without it a node has no Service routing, so
+# every pod on that node loses the API server and its databases. The limit belongs to the VM kernel
+# and resets when the VM restarts. Kind nodes are privileged, so a sysctl from any node sets it.
+INOTIFY_MAX_USER_INSTANCES=512
+INOTIFY_MAX_USER_WATCHES=524288
+
+raise_inotify_limits() {
+    local node instances
+    node="$(kind get nodes --name "${CLUSTER_NAME}" | head -1)"
+    [[ -n "${node}" ]] || die "no nodes found for Kind cluster ${CLUSTER_NAME}"
+    instances="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_instances)"
+    if (( instances >= INOTIFY_MAX_USER_INSTANCES )); then
+        log "inotify max_user_instances is ${instances}, nothing to raise"
+        return
+    fi
+    log "Raising inotify max_user_instances from ${instances} to ${INOTIFY_MAX_USER_INSTANCES}"
+    docker exec "${node}" sysctl -q -w \
+        "fs.inotify.max_user_instances=${INOTIFY_MAX_USER_INSTANCES}" \
+        "fs.inotify.max_user_watches=${INOTIFY_MAX_USER_WATCHES}"
+}
+
 # --- The local root CA in the macOS login keychain ------------------------------------------------
 # The login keychain needs no sudo; trusting a root there prompts once for your password in a macOS
 # dialog. Every cluster generates a new CA under the same name, so a stale one is removed first.

@@ -65,7 +65,7 @@ else
     log "[4/5] ${REGISTRY_NAME} already on the kind network"
 fi
 
-# --- 5. Advertise the registry (KEP-1755) and check inotify limits -------------------------------
+# --- 5. Advertise the registry (KEP-1755) and raise inotify limits -------------------------------
 log "[5/5] Publishing the local-registry-hosting ConfigMap"
 kubectl apply -f - >/dev/null <<EOF
 apiVersion: v1
@@ -79,14 +79,7 @@ data:
     help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
 EOF
 
-# Many controllers on one kernel exhaust the default inotify instances, and pods then crash with
-# "too many open files". The limit belongs to the VM kernel, so check it from a node.
-node="$(kind get nodes --name "${CLUSTER_NAME}" | head -1)"
-instances="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_instances)"
-if (( instances < 512 )); then
-    log "WARNING: fs.inotify.max_user_instances is ${instances}. Raise it before phase 3:"
-    log "  rdctl shell sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288"
-fi
+raise_inotify_limits
 
 cat <<EOF
 

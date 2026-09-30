@@ -24,7 +24,7 @@
       "test":          "uv run --group test pytest",
       "test-cluster":  "KUBECONFIG_FILE=\"$KUBECONFIG\" EXPECTED_CONTEXT=kind-local-idp uv run --group test pytest -v",
       "check-context": "test \"$(kubectl config current-context)\" = kind-local-idp && echo kind-local-idp",
-      "inotify":       "rdctl shell sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288"
+      "resume":        "./provision/resume-cluster.sh"
     }
   }
 }

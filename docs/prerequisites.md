@@ -9,13 +9,10 @@ Preferences, Virtual Machine: **16 GB memory, 6 CPUs**. `provision/create-cluste
 below 14 GiB or 6 CPUs, because the later phases do not fail cleanly on a small VM: pods sit Pending
 or are OOMKilled while ArgoCD reports Progressing indefinitely.
 
-Raise the inotify limits once per VM start, or pods crash with "too many open files":
-
-```bash
-rdctl shell sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288
-```
-
-`create-cluster.sh` checks the value and warns if it is low.
+The VM's default inotify limits are too low for this many controllers, and pods crash with "too
+many open files". `create-cluster.sh` raises them. They reset whenever the VM restarts, so after a
+laptop or Rancher Desktop restart run `./provision/resume-cluster.sh`, which raises them again and
+restarts the pods that crashed in the meantime.
 
 ## Tools
 
@@ -45,7 +42,7 @@ Inside the shell:
 - `KUBECONFIG` points at `~/.kube/local-idp`, so no command falls back to `~/.kube/config`.
 
 Scripts: `devbox run test` (cluster-free suite), `devbox run test-cluster <test file>` (sets
-`KUBECONFIG_FILE` and `EXPECTED_CONTEXT`), `devbox run check-context`, `devbox run inotify`.
+`KUBECONFIG_FILE` and `EXPECTED_CONTEXT`), `devbox run check-context`, `devbox run resume` (after a VM restart).
 
 ### With Homebrew
 
