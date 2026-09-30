@@ -14,10 +14,27 @@ readonly IMAGE_REPO="local-idp/backstage"
 
 # Must match backstage.image.tag in solution/platform/1-foundation/backstage/application.yaml.
 TAG="${TAG:-0.1.0}"
-# create-app version that ships the pinned Backstage line (components.yaml: 1.51.x).
-CREATE_APP_VERSION="${CREATE_APP_VERSION:-latest}"
+# The pinned Backstage release (components.yaml: backstage app_version), the create-app version that
+# ships it, and the plugin versions from the same release manifest.
+readonly BACKSTAGE_RELEASE="1.51.2"
+readonly BACKSTAGE_MANIFEST_URL="https://versions.backstage.io/v1/releases/${BACKSTAGE_RELEASE}/manifest.json"
+CREATE_APP_VERSION="${CREATE_APP_VERSION:-0.8.3}"
+readonly SCAFFOLDER_GITEA_VERSION="0.2.21"
+readonly KUBERNETES_BACKEND_VERSION="0.21.4"
+readonly KUBERNETES_VERSION="0.12.19"
+# Outside the Backstage release manifest. The scaffold's npmMinimalAgeGate (3d) refuses anything
+# fresher, so pin a release that has aged past it.
+readonly ROADIE_ARGO_CD_VERSION="2.12.5"
+readonly PG_VERSION="8.23.0"
+# Transitive, pinned below 4.9.2. See pin_release().
+readonly YARNPKG_CORE_VERSION="4.9.1"
 
 log() { printf '%s\n' "$*" >&2; }
+
+# Corepack picks the yarn version from the directory yarn starts in, not from --cwd. Started from the
+# repo root it runs yarn 1, which rewrites the scaffold's yarn 4 lockfile in the v1 format. Start it
+# inside the app so the scaffold's packageManager pin applies.
+app_yarn() { (cd "${APP_DIR}" && yarn "$@"); }
 
 require_tools() {
     local t missing=0
@@ -48,17 +65,46 @@ scaffold() {
     # create-app takes the app name only from a prompt, so feed it on stdin.
     printf 'backstage\n' | npx "@backstage/create-app@${CREATE_APP_VERSION}" \
         --path "${APP_DIR}" --skip-install
+
+    pin_release
+}
+
+# The scaffold's package.json uses caret ranges, and its lockfile does not cover them, so yarn
+# resolves every ^1.x @backstage package to the newest 1.x. That mixes releases: one tsc run found
+# frontend-plugin-api 0.13, 0.17 and 0.18 in the same tree (TS2742). Pinning every @backstage
+# package to the release manifest through resolutions is what makes the build that release.
+#
+# @yarnpkg/core rides along: 4.9.2 (2026-09-24) was published with a dependency on
+# patch:got@...#~/.yarn/patches/got-npm-11.8.2-*.patch, a file that exists only in Yarn's own repo,
+# so every install that resolves it fails with ENOENT. 4.9.1 depends on plain got.
+pin_release() {
+    log "pinning @backstage packages to release ${BACKSTAGE_RELEASE}"
+    node -e '
+        const fs = require("fs");
+        const [appDir, manifestUrl, yarnpkgCore] = process.argv.slice(1);
+        fetch(manifestUrl)
+            .then((r) => { if (!r.ok) throw new Error(manifestUrl + ": " + r.status); return r.json(); })
+            .then((manifest) => {
+                const path = appDir + "/package.json";
+                const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+                const resolutions = { ...pkg.resolutions, "@yarnpkg/core": yarnpkgCore };
+                for (const { name, version } of manifest.packages) resolutions[name] = version;
+                pkg.resolutions = resolutions;
+                fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+            })
+            .catch((e) => { console.error(e.message); process.exit(1); });
+    ' "${APP_DIR}" "${BACKSTAGE_MANIFEST_URL}" "${YARNPKG_CORE_VERSION}"
 }
 
 add_plugins() {
     log "adding plugins"
-    yarn --cwd "${APP_DIR}" workspace backend add \
-        @backstage/plugin-scaffolder-backend-module-gitea \
-        @backstage/plugin-kubernetes-backend \
-        pg
-    yarn --cwd "${APP_DIR}" workspace app add \
-        @roadiehq/backstage-plugin-argo-cd \
-        @backstage/plugin-kubernetes
+    app_yarn workspace backend add \
+        "@backstage/plugin-scaffolder-backend-module-gitea@${SCAFFOLDER_GITEA_VERSION}" \
+        "@backstage/plugin-kubernetes-backend@${KUBERNETES_BACKEND_VERSION}" \
+        "pg@${PG_VERSION}"
+    app_yarn workspace app add \
+        "@roadiehq/backstage-plugin-argo-cd@${ROADIE_ARGO_CD_VERSION}" \
+        "@backstage/plugin-kubernetes@${KUBERNETES_VERSION}"
 }
 
 overlay() {
@@ -70,9 +116,9 @@ overlay() {
 
 build_bundle() {
     log "installing and building the backend bundle"
-    yarn --cwd "${APP_DIR}" install
-    yarn --cwd "${APP_DIR}" tsc
-    yarn --cwd "${APP_DIR}" build:backend
+    app_yarn install
+    app_yarn tsc
+    app_yarn build:backend
 }
 
 build_image() {
