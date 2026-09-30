@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Golden Path Flow</title>
+<meta name="description" content="How a Go service travels from a Backstage template to a running canary on the local-idp Kind cluster: Git, events, CI, GitOps, rollout, and traffic.">
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --ink: #1c1d1f;
+    --muted: #5d6168;
+    --line: #d9dad6;
+    --accent: #0f766e;
+    --accent-soft: #e3f3f1;
+    --warn: #b45309;
+    --code-bg: #efefeb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141517;
+      --panel: #1c1e21;
+      --ink: #e8e8e6;
+      --muted: #a2a6ad;
+      --line: #34373c;
+      --accent: #2dd4bf;
+      --accent-soft: #15302d;
+      --warn: #f59e0b;
+      --code-bg: #25282c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141517;
+    --panel: #1c1e21;
+    --ink: #e8e8e6;
+    --muted: #a2a6ad;
+    --line: #34373c;
+    --accent: #2dd4bf;
+    --accent-soft: #15302d;
+    --warn: #f59e0b;
+    --code-bg: #25282c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+  header h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+  header p.lede { color: var(--muted); font-size: 1.1rem; max-width: 760px; margin: 0; }
+  nav.steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 8px; padding: 0; list-style: none; }
+  nav.steps a {
+    display: inline-block; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--ink); text-decoration: none; font-size: 0.9rem; background: var(--panel);
+  }
+  nav.steps a:hover { border-color: var(--accent); color: var(--accent); }
+  section { margin-top: 48px; }
+  section > h2 { font-size: 1.35rem; margin: 0 0 4px; }
+  section > h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  section > p.sub { color: var(--muted); margin: 0 0 16px; max-width: 800px; }
+  figure {
+    margin: 0; padding: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  }
+  figure svg { display: block; width: 100%; height: auto; color: var(--ink); }
+  figcaption { color: var(--muted); font-size: 0.92rem; margin-top: 12px; max-width: 860px; }
+  .callout {
+    margin-top: 24px; padding: 16px 20px; border-left: 4px solid var(--accent); background: var(--accent-soft);
+    border-radius: 0 10px 10px 0;
+  }
+  .callout strong { color: var(--accent); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.93rem; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em;
+    background: var(--code-bg); padding: 1px 5px; border-radius: 4px;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:last-child td { border-bottom: 0; }
+  .table-wrap { overflow-x: auto; }
+  footer { margin-top: 56px; color: var(--muted); font-size: 0.88rem; }
+
+  /* SVG drawing classes. Strokes and text follow the page foreground through currentColor. */
+  svg .box { fill: var(--panel); stroke: currentColor; stroke-width: 1.4; }
+  svg .box-soft { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; }
+  svg .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  svg .box-dim { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 4 3; }
+  svg .t { fill: currentColor; font-size: 13px; font-weight: 600; }
+  svg .s { fill: var(--muted); font-size: 11.5px; }
+  svg .lbl { fill: var(--muted); font-size: 11.5px; font-style: italic; }
+  svg .lbl-accent { fill: var(--accent); font-size: 11.5px; font-weight: 600; }
+  svg .lane { fill: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
+  svg .edge { fill: none; stroke: currentColor; stroke-width: 1.4; }
+  svg .edge-accent { fill: none; stroke: var(--accent); stroke-width: 2; }
+  svg .edge-dash { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+  svg .edge-muted { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+  svg .head { fill: currentColor; }
+  svg .head-accent { fill: var(--accent); }
+  svg .pod { fill: var(--panel); stroke: currentColor; stroke-width: 1.4; }
+  svg .pod-new { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  svg .x { stroke: var(--warn); stroke-width: 2.2; }
+  svg .t-warn { fill: var(--warn); font-size: 12px; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>The golden path, end to end</h1>
+  <p class="lede">What happens between clicking <em>Create</em> in Backstage and a Go service answering at
+  <code>https://&lt;name&gt;.localtest.me</code>. Every hand-off goes through Git, and every step below
+  was observed on this cluster with <code>hello-go</code>.</p>
+  <nav class="steps" aria-label="Sections">
+    <a href="#overview">Overview</a>
+    <a href="#scaffold">1 Scaffold</a>
+    <a href="#event">2 Event</a>
+    <a href="#ci">3 CI</a>
+    <a href="#gitops">4 GitOps</a>
+    <a href="#rollout">5 Rollout</a>
+    <a href="#running">6 Running service</a>
+    <a href="#guardrails">Guardrails</a>
+    <a href="#debug">When it breaks</a>
+  </nav>
+</header>
+
+<!-- ============================================================ OVERVIEW -->
+<section id="overview">
+  <h2>The whole loop</h2>
+  <p class="sub">Two loops meet at one Git repository. Events push a build forward; ArgoCD pulls the result back out.</p>
+  <figure>
+    <svg viewBox="0 0 1100 480" role="img" aria-label="Overview: a developer scaffolds a service in Backstage, which publishes a Gitea repo. A push webhook drives Argo Events and an Argo Workflow that builds an image into the registry and commits the new tag back to the repo. ArgoCD reads the repo and syncs the Rollout, Service and route into the apps namespace, which pulls the image from the registry.">
+      <defs>
+        <marker id="ov-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="ov-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-accent"/></marker>
+      </defs>
+
+      <text x="680" y="36" class="lane">BUILD: EVENTS PUSH WORK FORWARD</text>
+      <text x="680" y="470" class="lane">DEPLOY: ARGOCD PULLS FROM GIT</text>
+      <text x="20" y="206" class="lane">SCAFFOLD</text>
+
+      <!-- nodes -->
+      <rect x="20" y="225" width="130" height="50" rx="8" class="box"/>
+      <text x="85" y="255" text-anchor="middle" class="t">Developer</text>
+
+      <rect x="200" y="225" width="150" height="50" rx="8" class="box"/>
+      <text x="275" y="246" text-anchor="middle" class="t">Backstage</text>
+      <text x="275" y="263" text-anchor="middle" class="s">go-service template</text>
+
+      <rect x="420" y="210" width="190" height="80" rx="10" class="box-accent"/>
+      <text x="515" y="238" text-anchor="middle" class="t">Gitea repo</text>
+      <text x="515" y="256" text-anchor="middle" class="s">services/&lt;name&gt;</text>
+      <text x="515" y="273" text-anchor="middle" class="s">code + manifests/</text>
+
+      <rect x="680" y="60" width="170" height="60" rx="8" class="box"/>
+      <text x="765" y="86" text-anchor="middle" class="t">Argo Events</text>
+      <text x="765" y="104" text-anchor="middle" class="s">EventSource, Sensor</text>
+
+      <rect x="910" y="60" width="170" height="60" rx="8" class="box"/>
+      <text x="995" y="86" text-anchor="middle" class="t">Argo Workflows</text>
+      <text x="995" y="104" text-anchor="middle" class="s">ci-go-service, ns ci</text>
+
+      <rect x="910" y="220" width="170" height="60" rx="8" class="box"/>
+      <text x="995" y="246" text-anchor="middle" class="t">Registry</text>
+      <text x="995" y="264" text-anchor="middle" class="s">localhost:5001</text>
+
+      <rect x="680" y="380" width="170" height="60" rx="8" class="box"/>
+      <text x="765" y="406" text-anchor="middle" class="t">ArgoCD</text>
+      <text x="765" y="424" text-anchor="middle" class="s">ApplicationSet</text>
+
+      <rect x="910" y="380" width="170" height="60" rx="8" class="box"/>
+      <text x="995" y="406" text-anchor="middle" class="t">Namespace apps</text>
+      <text x="995" y="424" text-anchor="middle" class="s">Rollout, Service, Route</text>
+
+      <!-- scaffold edges -->
+      <line x1="150" y1="250" x2="197" y2="250" class="edge" marker-end="url(#ov-a)"/>
+      <text x="174" y="240" text-anchor="middle" class="lbl">fills form</text>
+      <line x1="350" y1="250" x2="417" y2="250" class="edge" marker-end="url(#ov-a)"/>
+      <text x="384" y="240" text-anchor="middle" class="lbl">publishes</text>
+
+      <!-- build edges -->
+      <polyline points="560,210 560,90 677,90" class="edge" marker-end="url(#ov-a)"/>
+      <text x="568" y="150" class="lbl">push webhook</text>
+      <line x1="850" y1="90" x2="907" y2="90" class="edge" marker-end="url(#ov-a)"/>
+      <text x="879" y="80" text-anchor="middle" class="lbl">submits</text>
+      <line x1="995" y1="120" x2="995" y2="217" class="edge" marker-end="url(#ov-a)"/>
+      <text x="1003" y="175" class="lbl">pushes :&lt;sha&gt;</text>
+      <polyline points="935,120 935,172 590,172 590,207" class="edge-dash" marker-end="url(#ov-b)"/>
+      <text x="762" y="164" text-anchor="middle" class="lbl-accent">commits newTag, [skip ci]</text>
+
+      <!-- deploy edges -->
+      <polyline points="680,410 515,410 515,293" class="edge" marker-end="url(#ov-a)"/>
+      <text x="523" y="360" class="lbl">reads (polls)</text>
+      <line x1="850" y1="410" x2="907" y2="410" class="edge" marker-end="url(#ov-a)"/>
+      <text x="879" y="400" text-anchor="middle" class="lbl">syncs</text>
+      <line x1="995" y1="380" x2="995" y2="283" class="edge" marker-end="url(#ov-a)"/>
+      <text x="1003" y="335" class="lbl">pulls image</text>
+    </svg>
+    <figcaption>The dashed commit is what connects the two loops: CI never touches the cluster, it only
+    writes a new image tag into Git. ArgoCD never builds anything, it only applies what Git says. The
+    <code>[skip ci]</code> marker stops that commit from starting another build.</figcaption>
+  </figure>
+
+  <div class="callout"><strong>The one rule:</strong> Git is the only hand-off. To know what is running,
+  read <code>manifests/kustomization.yaml</code> in the service repo. To change it, commit.</div>
+</section>
+
+<!-- ============================================================ 1 SCAFFOLD -->
+<section id="scaffold">
+  <h2><span class="num">1</span>Scaffold in Backstage</h2>
+  <p class="sub">The <code>go-service</code> template runs three actions. Each one leaves something behind.</p>
+  <figure>
+    <svg viewBox="0 0 1000 250" role="img" aria-label="The Backstage template renders the skeleton, publishes it to a new Gitea repo, and registers the service's catalog-info.yaml in the catalog.">
+      <defs>
+        <marker id="sc-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+      </defs>
+      <rect x="20" y="40" width="150" height="60" rx="8" class="box"/>
+      <text x="95" y="66" text-anchor="middle" class="t">Create form</text>
+      <text x="95" y="84" text-anchor="middle" class="s">name, owner</text>
+
+      <rect x="230" y="40" width="200" height="60" rx="8" class="box"/>
+      <text x="330" y="66" text-anchor="middle" class="t">fetch:template</text>
+      <text x="330" y="84" text-anchor="middle" class="s">render skeleton/</text>
+
+      <rect x="490" y="40" width="200" height="60" rx="8" class="box"/>
+      <text x="590" y="66" text-anchor="middle" class="t">publish:gitea</text>
+      <text x="590" y="84" text-anchor="middle" class="s">create repo, push main</text>
+
+      <rect x="750" y="40" width="230" height="60" rx="8" class="box"/>
+      <text x="865" y="66" text-anchor="middle" class="t">catalog:register</text>
+      <text x="865" y="84" text-anchor="middle" class="s">catalog-info.yaml on main</text>
+
+      <line x1="170" y1="70" x2="227" y2="70" class="edge" marker-end="url(#sc-a)"/>
+      <line x1="430" y1="70" x2="487" y2="70" class="edge" marker-end="url(#sc-a)"/>
+      <line x1="690" y1="70" x2="747" y2="70" class="edge" marker-end="url(#sc-a)"/>
+
+      <rect x="230" y="150" width="200" height="80" rx="8" class="box-soft"/>
+      <text x="330" y="172" text-anchor="middle" class="t">In memory</text>
+      <text x="330" y="192" text-anchor="middle" class="s">main.go, Dockerfile,</text>
+      <text x="330" y="208" text-anchor="middle" class="s">manifests/, catalog-info</text>
+
+      <rect x="490" y="150" width="200" height="80" rx="8" class="box-accent"/>
+      <text x="590" y="178" text-anchor="middle" class="t">Gitea repo</text>
+      <text x="590" y="198" text-anchor="middle" class="s">services/&lt;name&gt;</text>
+      <text x="590" y="214" text-anchor="middle" class="s">first push = first build</text>
+
+      <rect x="750" y="150" width="230" height="80" rx="8" class="box-soft"/>
+      <text x="865" y="178" text-anchor="middle" class="t">Catalog Component</text>
+      <text x="865" y="198" text-anchor="middle" class="s">owned by platform-team</text>
+      <text x="865" y="214" text-anchor="middle" class="s">shows pods, Rollout, ArgoCD</text>
+
+      <line x1="330" y1="100" x2="330" y2="147" class="edge-muted" marker-end="url(#sc-a)"/>
+      <line x1="590" y1="100" x2="590" y2="147" class="edge-muted" marker-end="url(#sc-a)"/>
+      <line x1="865" y1="100" x2="865" y2="147" class="edge-muted" marker-end="url(#sc-a)"/>
+    </svg>
+    <figcaption>The name you type becomes the repo name, every Kubernetes object name, and the
+    hostname. The push that <code>publish:gitea</code> makes is an ordinary push, so it starts CI
+    straight away.</figcaption>
+  </figure>
+  <div class="cols">
+    <div class="card"><h3>What the repo holds</h3><p>A standard-library Go server (<code>/</code>,
+    <code>/healthz</code>, <code>/metrics</code>), its Dockerfile, and <code>manifests/</code>: Rollout,
+    Service, HTTPRoute, ServiceMonitor, ScaledObject, tied together by a kustomization.</p></div>
+    <div class="card"><h3>The first sync pulls a missing image</h3><p>The kustomization starts at
+    <code>newTag: "initial"</code>, which does not exist. The Rollout shows ImagePullBackOff until the
+    first build commits a real tag, usually within a minute.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ 2 EVENT -->
+<section id="event">
+  <h2><span class="num">2</span>From push to build request</h2>
+  <p class="sub">Gitea calls a webhook on every push in the <code>services</code> org. The Sensor decides which pushes deserve a build.</p>
+  <figure>
+    <svg viewBox="0 0 1000 250" role="img" aria-label="A push goes from Gitea to the Argo Events EventSource, onto the JetStream EventBus, to the Sensor. The Sensor submits a Workflow for a normal commit on main and ignores the pipeline's own skip ci commit.">
+      <defs>
+        <marker id="ev-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="ev-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-accent"/></marker>
+      </defs>
+      <rect x="20" y="95" width="140" height="60" rx="8" class="box"/>
+      <text x="90" y="121" text-anchor="middle" class="t">Gitea</text>
+      <text x="90" y="139" text-anchor="middle" class="s">org push webhook</text>
+
+      <rect x="215" y="95" width="160" height="60" rx="8" class="box"/>
+      <text x="295" y="121" text-anchor="middle" class="t">EventSource</text>
+      <text x="295" y="139" text-anchor="middle" class="s">gitea, :12000/push</text>
+
+      <rect x="430" y="95" width="140" height="60" rx="8" class="box"/>
+      <text x="500" y="121" text-anchor="middle" class="t">EventBus</text>
+      <text x="500" y="139" text-anchor="middle" class="s">JetStream, 3 pods</text>
+
+      <rect x="625" y="80" width="180" height="90" rx="10" class="box-accent"/>
+      <text x="715" y="106" text-anchor="middle" class="t">Sensor filter</text>
+      <text x="715" y="126" text-anchor="middle" class="s">ref == refs/heads/main</text>
+      <text x="715" y="143" text-anchor="middle" class="s">message != [skip ci]</text>
+
+      <rect x="860" y="30" width="120" height="56" rx="8" class="box"/>
+      <text x="920" y="54" text-anchor="middle" class="t">Workflow</text>
+      <text x="920" y="71" text-anchor="middle" class="s">submitted in ci</text>
+
+      <rect x="860" y="165" width="120" height="56" rx="8" class="box-dim"/>
+      <text x="920" y="189" text-anchor="middle" class="t">Dropped</text>
+      <text x="920" y="206" text-anchor="middle" class="s">no build</text>
+
+      <line x1="160" y1="125" x2="212" y2="125" class="edge" marker-end="url(#ev-a)"/>
+      <line x1="375" y1="125" x2="427" y2="125" class="edge" marker-end="url(#ev-a)"/>
+      <line x1="570" y1="125" x2="622" y2="125" class="edge" marker-end="url(#ev-a)"/>
+
+      <polyline points="805,105 835,105 835,58 857,58" class="edge-accent" marker-end="url(#ev-b)"/>
+      <text x="843" y="100" class="lbl-accent" text-anchor="start">your commit</text>
+      <polyline points="805,145 835,145 835,193 857,193" class="edge" marker-end="url(#ev-a)"/>
+      <text x="827" y="212" class="lbl" text-anchor="end">pipeline's own commit</text>
+    </svg>
+    <figcaption>Two pushes arrive for every change: yours, and the pipeline's tag commit a minute later.
+    Only the first one builds. On this cluster <code>hello-go</code> produced two webhook events and
+    exactly one Workflow per change.</figcaption>
+  </figure>
+  <div class="cols">
+    <div class="card"><h3>What the Sensor passes on</h3><p><code>body.repository.clone_url</code>,
+    <code>body.repository.name</code> and <code>body.after</code> (the commit SHA) become the Workflow
+    parameters.</p></div>
+    <div class="card"><h3>Why Gitea is allowed to call in</h3><p>Gitea blocks webhooks to private
+    addresses unless <code>webhook.ALLOWED_HOST_LIST: private</code> is set, which it is.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ 3 CI -->
+<section id="ci">
+  <h2><span class="num">3</span>The CI Workflow</h2>
+  <p class="sub"><code>ci-go-service</code> runs four steps in the <code>ci</code> namespace as <code>ci-runner</code>. It has two outputs: an image and a commit.</p>
+  <figure>
+    <svg viewBox="0 0 1000 260" role="img" aria-label="The CI workflow runs clone, test, build and bump-tag in order on a shared workspace volume. Build pushes the image to the registry. Bump-tag commits the new tag to the service repo.">
+      <defs>
+        <marker id="ci-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="ci-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-accent"/></marker>
+      </defs>
+      <rect x="20" y="30" width="200" height="66" rx="8" class="box"/>
+      <text x="120" y="56" text-anchor="middle" class="t">clone</text>
+      <text x="120" y="75" text-anchor="middle" class="s">checkout &lt;sha&gt;</text>
+
+      <rect x="260" y="30" width="200" height="66" rx="8" class="box"/>
+      <text x="360" y="56" text-anchor="middle" class="t">test</text>
+      <text x="360" y="75" text-anchor="middle" class="s">go vet, go test</text>
+
+      <rect x="500" y="30" width="200" height="66" rx="8" class="box"/>
+      <text x="600" y="56" text-anchor="middle" class="t">build</text>
+      <text x="600" y="75" text-anchor="middle" class="s">BuildKit, rootless</text>
+
+      <rect x="740" y="30" width="240" height="66" rx="8" class="box"/>
+      <text x="860" y="56" text-anchor="middle" class="t">bump-tag</text>
+      <text x="860" y="75" text-anchor="middle" class="s">set newTag, git push</text>
+
+      <line x1="220" y1="63" x2="257" y2="63" class="edge" marker-end="url(#ci-a)"/>
+      <line x1="460" y1="63" x2="497" y2="63" class="edge" marker-end="url(#ci-a)"/>
+      <line x1="700" y1="63" x2="737" y2="63" class="edge" marker-end="url(#ci-a)"/>
+
+      <rect x="480" y="135" width="240" height="56" rx="8" class="box-soft"/>
+      <text x="600" y="159" text-anchor="middle" class="t">Image in the registry</text>
+      <text x="600" y="176" text-anchor="middle" class="s">services/&lt;name&gt;:&lt;sha&gt;</text>
+
+      <rect x="740" y="135" width="240" height="56" rx="8" class="box-accent"/>
+      <text x="860" y="159" text-anchor="middle" class="t">Commit on main</text>
+      <text x="860" y="176" text-anchor="middle" class="s">[skip ci] Deploy &lt;sha&gt;</text>
+
+      <line x1="600" y1="96" x2="600" y2="132" class="edge" marker-end="url(#ci-a)"/>
+      <text x="608" y="120" class="lbl">kind-registry:5000</text>
+      <line x1="860" y1="96" x2="860" y2="132" class="edge-accent" marker-end="url(#ci-b)"/>
+
+      <rect x="20" y="215" width="960" height="30" rx="6" class="box-dim"/>
+      <text x="500" y="235" text-anchor="middle" class="s">one workspace volume shared by all four steps (volumeClaimTemplate)</text>
+    </svg>
+    <figcaption>The image tag is the commit SHA, so every image traces back to exactly one commit. The
+    build pushes to <code>kind-registry:5000</code> from inside the cluster; the same registry is
+    <code>localhost:5001</code> to nodes and to your Mac, which is the name the manifests use.</figcaption>
+  </figure>
+  <div class="cols">
+    <div class="card"><h3>Why <code>ci</code> is privileged</h3><p>Rootless BuildKit needs seccomp and
+    AppArmor unconfined, so <code>ci</code> is a privileged Pod Security namespace. Nothing but build
+    pods runs there.</p></div>
+    <div class="card"><h3>Cleanup</h3><p>Step pods are deleted when a Workflow succeeds; failed ones stay
+    for debugging. The Workflow object itself is deleted an hour after it finishes.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ 4 GITOPS -->
+<section id="gitops">
+  <h2><span class="num">4</span>GitOps: ArgoCD takes over</h2>
+  <p class="sub">Nobody creates an ArgoCD Application by hand. An ApplicationSet discovers service repos and generates one per repo.</p>
+  <figure>
+    <svg viewBox="0 0 1000 250" role="img" aria-label="The golden-path-services ApplicationSet scans the Gitea services org every 60 seconds for repos with a manifests directory, and generates an Application svc-name per repo. The golden-path-services AppProject only allows sources from the Gitea services org and the apps namespace as destination.">
+      <defs>
+        <marker id="go-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+      </defs>
+      <rect x="20" y="60" width="180" height="70" rx="8" class="box-accent"/>
+      <text x="110" y="88" text-anchor="middle" class="t">Gitea org services</text>
+      <text x="110" y="107" text-anchor="middle" class="s">repos with manifests/</text>
+
+      <rect x="270" y="60" width="200" height="70" rx="8" class="box"/>
+      <text x="370" y="88" text-anchor="middle" class="t">ApplicationSet</text>
+      <text x="370" y="107" text-anchor="middle" class="s">scmProvider, https</text>
+
+      <rect x="540" y="60" width="180" height="70" rx="8" class="box"/>
+      <text x="630" y="88" text-anchor="middle" class="t">Application</text>
+      <text x="630" y="107" text-anchor="middle" class="s">svc-&lt;name&gt;</text>
+
+      <rect x="790" y="60" width="190" height="70" rx="8" class="box"/>
+      <text x="885" y="88" text-anchor="middle" class="t">Namespace apps</text>
+      <text x="885" y="107" text-anchor="middle" class="s">kustomize build manifests/</text>
+
+      <line x1="270" y1="95" x2="203" y2="95" class="edge" marker-end="url(#go-a)"/>
+      <text x="236" y="85" text-anchor="middle" class="lbl">scans / 60s</text>
+      <line x1="470" y1="95" x2="537" y2="95" class="edge" marker-end="url(#go-a)"/>
+      <text x="504" y="85" text-anchor="middle" class="lbl">generates</text>
+      <line x1="720" y1="95" x2="787" y2="95" class="edge" marker-end="url(#go-a)"/>
+      <text x="754" y="85" text-anchor="middle" class="lbl">auto-sync</text>
+
+      <rect x="540" y="170" width="440" height="60" rx="8" class="box-dim"/>
+      <text x="760" y="194" text-anchor="middle" class="t">AppProject golden-path-services</text>
+      <text x="760" y="213" text-anchor="middle" class="s">source: gitea-http.gitea.svc:3000/services/*   destination: apps only</text>
+      <line x1="630" y1="167" x2="630" y2="133" class="edge-muted" marker-end="url(#go-a)"/>
+      <text x="638" y="155" class="lbl">bounds</text>
+    </svg>
+    <figcaption>A repo becomes deployable by existing in the org with a <code>manifests/</code>
+    directory. The AppProject is the fence: a generated Application cannot read from anywhere else or
+    deploy anywhere but <code>apps</code>.</figcaption>
+  </figure>
+  <div class="cols">
+    <div class="card"><h3>Sync policy</h3><p>Automated with <code>prune</code> and
+    <code>selfHeal</code>, and server-side apply. A manual <code>kubectl edit</code> in
+    <code>apps</code> is reverted.</p></div>
+    <div class="card"><h3>Timing</h3><p>New repos appear within about a minute. A new commit is picked
+    up on ArgoCD's repo poll, about three minutes, which is most of the delay between a build finishing
+    and the rollout starting.</p></div>
+    <div class="card"><h3>Synced means Git matches</h3><p>The manifests spell out fields the API
+    server would default (route <code>group</code>, <code>kind</code>, <code>weight</code>, port
+    <code>protocol</code>), or ArgoCD would report OutOfSync forever.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ 5 ROLLOUT -->
+<section id="rollout">
+  <h2><span class="num">5</span>The canary rollout</h2>
+  <p class="sub">The workload is an Argo Rollout, not a Deployment. A new tag goes out in two steps: half, then all.</p>
+  <figure>
+    <svg viewBox="0 0 1000 270" role="img" aria-label="Rollout canary: before, only the stable ReplicaSet runs. At setWeight 50 a canary pod with the new image runs next to the stable pod behind the same Service for a 30 second pause. After the pause the canary is promoted and the old ReplicaSet scales to zero.">
+      <defs>
+        <marker id="ro-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+      </defs>
+      <!-- column titles -->
+      <text x="150" y="28" text-anchor="middle" class="t">Before</text>
+      <text x="150" y="45" text-anchor="middle" class="s">old tag running</text>
+      <text x="500" y="28" text-anchor="middle" class="t">setWeight: 50, pause 30s</text>
+      <text x="500" y="45" text-anchor="middle" class="s">both versions serve</text>
+      <text x="850" y="28" text-anchor="middle" class="t">Promoted</text>
+      <text x="850" y="45" text-anchor="middle" class="s">new tag running</text>
+
+      <!-- services -->
+      <rect x="75" y="65" width="150" height="40" rx="8" class="box"/>
+      <text x="150" y="90" text-anchor="middle" class="t">Service</text>
+      <rect x="425" y="65" width="150" height="40" rx="8" class="box"/>
+      <text x="500" y="90" text-anchor="middle" class="t">Service</text>
+      <rect x="775" y="65" width="150" height="40" rx="8" class="box"/>
+      <text x="850" y="90" text-anchor="middle" class="t">Service</text>
+
+      <!-- before -->
+      <line x1="150" y1="105" x2="150" y2="140" class="edge" marker-end="url(#ro-a)"/>
+      <circle cx="150" cy="165" r="22" class="pod"/>
+      <text x="150" y="169" text-anchor="middle" class="s">v1</text>
+      <text x="150" y="215" text-anchor="middle" class="s">stable ReplicaSet</text>
+
+      <!-- during -->
+      <line x1="480" y1="105" x2="440" y2="140" class="edge" marker-end="url(#ro-a)"/>
+      <line x1="520" y1="105" x2="560" y2="140" class="edge" marker-end="url(#ro-a)"/>
+      <circle cx="430" cy="165" r="22" class="pod"/>
+      <text x="430" y="169" text-anchor="middle" class="s">v1</text>
+      <circle cx="570" cy="165" r="22" class="pod-new"/>
+      <text x="570" y="169" text-anchor="middle" class="s">v2</text>
+      <text x="430" y="215" text-anchor="middle" class="s">stable</text>
+      <text x="570" y="215" text-anchor="middle" class="s">canary</text>
+
+      <!-- after -->
+      <line x1="850" y1="105" x2="850" y2="140" class="edge" marker-end="url(#ro-a)"/>
+      <circle cx="850" cy="165" r="22" class="pod-new"/>
+      <text x="850" y="169" text-anchor="middle" class="s">v2</text>
+      <text x="850" y="215" text-anchor="middle" class="s">new stable</text>
+      <text x="850" y="232" text-anchor="middle" class="s">old ReplicaSet at 0</text>
+
+      <!-- transitions -->
+      <line x1="245" y1="165" x2="385" y2="165" class="edge" marker-end="url(#ro-a)"/>
+      <text x="315" y="155" text-anchor="middle" class="lbl">new tag synced</text>
+      <line x1="615" y1="165" x2="805" y2="165" class="edge" marker-end="url(#ro-a)"/>
+      <text x="710" y="155" text-anchor="middle" class="lbl">after 30s</text>
+    </svg>
+    <figcaption>There is no traffic router plugin. Canary and stable pods sit behind one Service, so
+    traffic splits by pod count. That is enough to see a canary step on a laptop; a mesh or Gateway
+    plugin would split by exact percentage.</figcaption>
+  </figure>
+  <div class="cols">
+    <div class="card"><h3>Who owns replicas</h3><p>The Rollout has no <code>replicas</code> field. KEDA
+    sets it (see below), so ArgoCD and the autoscaler never fight over it.</p></div>
+    <div class="card"><h3>Rolling back</h3><p>Revert the tag commit in the service repo. ArgoCD syncs
+    the old tag and the Rollout runs the same two steps back to it.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ 6 RUNNING -->
+<section id="running">
+  <h2><span class="num">6</span>The running service</h2>
+  <p class="sub">Two paths matter once it is up: how a request reaches a pod, and how the pod count follows load.</p>
+  <figure>
+    <svg viewBox="0 0 1100 300" role="img" aria-label="A browser request to port 443 is mapped by Kind to NodePort 30443 on the control plane, reaches Envoy on any node, matches the service's HTTPRoute, and goes through the Service to a pod on port 8080. Prometheus scrapes the pod's metrics every 15 seconds, KEDA queries Prometheus for the request rate, and scales the Rollout between 1 and 3 replicas.">
+      <defs>
+        <marker id="ru-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="ru-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-accent"/></marker>
+      </defs>
+      <text x="20" y="24" class="lane">REQUEST PATH</text>
+      <rect x="20" y="40" width="150" height="60" rx="8" class="box"/>
+      <text x="95" y="66" text-anchor="middle" class="t">Browser</text>
+      <text x="95" y="84" text-anchor="middle" class="s">&lt;name&gt;.localtest.me</text>
+
+      <rect x="210" y="40" width="150" height="60" rx="8" class="box"/>
+      <text x="285" y="66" text-anchor="middle" class="t">Kind node</text>
+      <text x="285" y="84" text-anchor="middle" class="s">:443 to :30443</text>
+
+      <rect x="400" y="40" width="150" height="60" rx="8" class="box"/>
+      <text x="475" y="66" text-anchor="middle" class="t">Envoy Gateway</text>
+      <text x="475" y="84" text-anchor="middle" class="s">TLS ends here</text>
+
+      <rect x="590" y="40" width="150" height="60" rx="8" class="box"/>
+      <text x="665" y="66" text-anchor="middle" class="t">HTTPRoute</text>
+      <text x="665" y="84" text-anchor="middle" class="s">host match</text>
+
+      <rect x="780" y="40" width="150" height="60" rx="8" class="box"/>
+      <text x="855" y="66" text-anchor="middle" class="t">Service</text>
+      <text x="855" y="84" text-anchor="middle" class="s">:80</text>
+
+      <rect x="970" y="40" width="110" height="60" rx="8" class="box-accent"/>
+      <text x="1025" y="66" text-anchor="middle" class="t">Pod</text>
+      <text x="1025" y="84" text-anchor="middle" class="s">:8080</text>
+
+      <line x1="170" y1="70" x2="207" y2="70" class="edge" marker-end="url(#ru-a)"/>
+      <line x1="360" y1="70" x2="397" y2="70" class="edge" marker-end="url(#ru-a)"/>
+      <line x1="550" y1="70" x2="587" y2="70" class="edge" marker-end="url(#ru-a)"/>
+      <line x1="740" y1="70" x2="777" y2="70" class="edge" marker-end="url(#ru-a)"/>
+      <line x1="930" y1="70" x2="967" y2="70" class="edge" marker-end="url(#ru-a)"/>
+
+      <text x="20" y="174" class="lane">SCALING LOOP</text>
+      <rect x="780" y="190" width="150" height="60" rx="8" class="box"/>
+      <text x="855" y="216" text-anchor="middle" class="t">Prometheus</text>
+      <text x="855" y="234" text-anchor="middle" class="s">ServiceMonitor</text>
+
+      <rect x="590" y="190" width="150" height="60" rx="8" class="box"/>
+      <text x="665" y="216" text-anchor="middle" class="t">KEDA</text>
+      <text x="665" y="234" text-anchor="middle" class="s">ScaledObject</text>
+
+      <rect x="400" y="190" width="150" height="60" rx="8" class="box"/>
+      <text x="475" y="216" text-anchor="middle" class="t">Rollout</text>
+      <text x="475" y="234" text-anchor="middle" class="s">replicas 1 to 3</text>
+
+      <polyline points="1025,100 1025,220 933,220" class="edge-accent" marker-start="url(#ru-b)"/>
+      <text x="1017" y="165" text-anchor="end" class="lbl-accent">scrapes /metrics, 15s</text>
+      <line x1="740" y1="220" x2="777" y2="220" class="edge" marker-end="url(#ru-a)"/>
+      <text x="759" y="210" text-anchor="middle" class="lbl">queries</text>
+      <line x1="590" y1="220" x2="553" y2="220" class="edge" marker-end="url(#ru-a)"/>
+      <text x="571" y="210" text-anchor="middle" class="lbl">scales</text>
+      <polyline points="400,220 360,220 360,130 1000,130 1000,103" class="edge-muted" marker-end="url(#ru-a)"/>
+      <text x="370" y="148" class="lbl">adds or removes pods</text>
+    </svg>
+    <figcaption>Kind has no load balancer, so host ports 80 and 443 map onto NodePorts on the control
+    plane, and Envoy's Service uses <code>externalTrafficPolicy: Cluster</code> so traffic reaches Envoy
+    on whichever node it runs. Kind has no metrics-server either, so KEDA scales on the request rate
+    from Prometheus, <code>sum(rate(http_requests_total[1m]))</code>, targeting about 5 requests per
+    second per replica.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ GUARDRAILS -->
+<section id="guardrails">
+  <h2>Guardrails</h2>
+  <p class="sub">Kyverno enforces three rules in namespaces labelled <code>local-idp.dev/policy=enforce</code>, which today is only <code>apps</code>. The golden path satisfies all three by construction.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Policy</th><th>Rule</th><th>How the golden path meets it</th></tr></thead>
+    <tbody>
+      <tr><td><code>golden-path-restrict-registries</code></td><td>Images come from <code>localhost:5001/</code></td><td>CI pushes there; the kustomization points there.</td></tr>
+      <tr><td><code>golden-path-disallow-latest</code></td><td>An explicit tag, never <code>latest</code></td><td>The tag is the commit SHA.</td></tr>
+      <tr><td><code>golden-path-require-non-root</code></td><td><code>runAsNonRoot: true</code></td><td>The skeleton runs as uid 65532.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="sub" style="margin-top:12px">Try it: <code>./scripts/denial-demo.sh</code> applies a <code>docker.io/library/nginx:latest</code> Pod to <code>apps</code> and shows all three denials, then shows the same Pod admitted in <code>default</code>.</p>
+</section>
+
+<!-- ============================================================ DEBUG -->
+<section id="debug">
+  <h2>When it breaks, look here</h2>
+  <p class="sub">Follow the flow in order. The first place the trail goes cold is the problem.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Symptom</th><th>First place to look</th></tr></thead>
+    <tbody>
+      <tr><td>Template fails in Backstage</td><td>The task log on the Create page; then <code>kubectl -n backstage logs deploy/backstage</code></td></tr>
+      <tr><td>No Workflow after a push</td><td>Gitea repo or org settings, Webhooks, Recent deliveries; then the Sensor pod logs in <code>argo-events</code></td></tr>
+      <tr><td>Workflow fails</td><td><code>kubectl -n ci get workflows</code>, then the failed step's pod logs (kept on failure)</td></tr>
+      <tr><td>No <code>svc-&lt;name&gt;</code> Application</td><td><code>kubectl -n argocd get applicationset golden-path-services -o yaml</code>, status conditions</td></tr>
+      <tr><td>Application OutOfSync or Degraded</td><td>ArgoCD UI at <code>https://argocd.localtest.me</code>, the app's diff and events</td></tr>
+      <tr><td>Pods refused in <code>apps</code></td><td>The admission error names the Kyverno policy; <code>kubectl -n apps get policyreports</code></td></tr>
+      <tr><td>Hostname does not answer</td><td><code>kubectl -n apps get httproute &lt;name&gt; -o yaml</code>: <code>Accepted</code> and <code>ResolvedRefs</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<footer>
+  Sources: <code>platform/2-self-service/</code> (template, skeleton, ci-pipeline, golden-path-deploy,
+  golden-path-policies). See also <code>docs/architecture.md</code> and <code>STATUS.md</code>.
+</footer>
+
+</main>
+</body>
+</html>
