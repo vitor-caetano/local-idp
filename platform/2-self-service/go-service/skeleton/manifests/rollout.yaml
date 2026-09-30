@@ -37,8 +37,11 @@ spec:
         - name: app
           image: app
           ports:
+            # protocol is the API server's default, spelled out so svc-<name> does not read
+            # OutOfSync forever.
             - name: http
               containerPort: 8080
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /healthz
