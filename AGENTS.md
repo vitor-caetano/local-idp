@@ -98,8 +98,9 @@ because the golden-path service repos and their CI webhooks always live there.
   sanctioned flip to Enforce is the golden-path policy set in phase 7. The foundation baseline
   stays Audit.
 - Never run mutating `kubectl` directly against the cluster, except for the bootstrap (installing
-  ArgoCD and seeding Gitea), the scripted Kyverno denial demonstration, and the pod restarts in
-  `provision/resume-cluster.sh` after a VM restart.
+  ArgoCD and seeding Gitea), the scripted Kyverno denial demonstration, and the recovery steps in
+  `provision/resume-cluster.sh` after a VM restart (pod restarts, the OpenBao refill, an
+  ExternalSecret force-sync).
 - CRDs require server-side apply: `kubectl apply --server-side --force-conflicts`. Every
   Application sets `ServerSideApply=true`.
 - ArgoCD is on the 3.x line. RBAC changed in 3.0: `update` and `delete` no longer cascade to
