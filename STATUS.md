@@ -2,25 +2,29 @@
 
 Where the build stands. Update this file when a phase completes.
 
-## As of 2026-09-29
+## As of 2026-09-30
 
-**Phase 0 done.** The Kind cluster `local-idp` runs three nodes on Kubernetes v1.36.4, with
-`kind-registry` on `127.0.0.1:5001` attached to the `kind` network. `tests/test_phase_0_preflight.py`
-passes (5 of 5). The cluster is bare: `default`, `kube-*` and `local-path-storage` namespaces only,
-holding CoreDNS, kindnet, kube-proxy, the control plane, and the local-path provisioner. The repo is
-public at https://github.com/vitor-caetano/local-idp.
+**Phase 1 done.** ArgoCD reads `platform/` from the in-cluster Gitea, and all 25 foundation
+Applications (waves 0 to 6) are Synced and Healthy. `tests/test_phase_1_gitops_and_traffic.py`
+passes (6 of 6): `http://gitea.localtest.me` answers 301 to https from the host. The Backstage image
+`localhost:5001/local-idp/backstage:0.1.0` is built from Backstage 1.51.2. The repo is public at
+https://github.com/vitor-caetano/local-idp.
+
+Phase 0's `test_cluster_is_bare` now fails by design: it asserts the pre-ArgoCD state.
+
+Tools come from `devbox.json` (see `docs/prerequisites.md`).
 
 | Phase | State |
 |---|---|
 | 0 Preflight and cluster | Done 2026-09-29 |
-| 1 to 7 | Not started |
+| 1 GitOps and traffic | Done 2026-09-30 |
+| 2 to 7 | Not started |
 
 ## Next steps
 
-1. Install `yarn` and `node@24` before phase 1. The machine has Node 26 and no yarn, and the
-   Backstage image build needs Node 24 (Node 25+ cannot build isolated-vm).
-2. Start phase 1: `spec/phases/phase-1-gitops-and-traffic.md`.
-3. The inotify limits reset when the Rancher Desktop VM restarts. Raise them again after each restart.
+1. Start phase 2: `spec/phases/phase-2-secrets-and-policy.md`. Its components are already synced.
+2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
+   restart.
 
 ## Unproven until the first build
 
@@ -29,7 +33,6 @@ fix the pin in `components.yaml` and the Application, then run `scripts/gen-vers
 
 | Item | Where it bites |
 |---|---|
-| Envoy Gateway 1.9.2, and the EnvoyProxy NodePort patch | Phase 1 |
 | Grafana Alloy chart 1.13.0 and its config | Phase 3 |
 | Argo Workflows chart 1.0.16 values keys (`workflowNamespaces`, `workflow.serviceAccount`) | Phase 4 |
 | BuildKit v0.33.0 rootless | Phase 6 |
@@ -38,7 +41,30 @@ fix the pin in `components.yaml` and the Application, then run `scripts/gen-vers
 Components shared with the EKS sibling platform (ArgoCD, Gitea, cert-manager, OpenBao, ESO,
 Kyverno, the observability charts, the Argo charts, KEDA, Backstage) reuse pins that build validated.
 
+## Fixed during phase 1
+
+Each was a defect in the reference build too. The manifest fixes are mirrored in `solution/`; the
+Backstage fixes are in the shared `images/backstage/build-and-push.sh`.
+
+- **Backstage build floated to the newest release.** `create-app@latest` scaffolded 1.55.0, and the
+  scaffold's caret ranges mixed releases even when pinned (TS2742). `build-and-push.sh` now pins
+  create-app 0.8.3 and every `@backstage` package to the 1.51.2 manifest through `resolutions`.
+- **`@yarnpkg/core` 4.9.2 is broken upstream** (a `patch:` dependency on a file only in Yarn's repo).
+  Pinned to 4.9.1 in the same `resolutions`. Drop the pin once a fixed release ships.
+- **`yarn --cwd` ran yarn 1.** Corepack picks the version from the starting directory. The script
+  now runs yarn inside the app.
+- **Permanent OutOfSync on the Gateway, every HTTPRoute, and the Postgres StatefulSet.** The API
+  server defaults fields Git omitted. The manifests now spell them out. Server-side diff was tried
+  and did not absorb them.
+- **The host timed out on port 80.** Envoy Gateway defaults the Service to
+  `externalTrafficPolicy: Local`, and Kind maps host ports onto the control plane while Envoy runs on
+  a worker. The EnvoyProxy now sets `Cluster`.
+
 ## Known open items
+
+- The golden-path skeleton's HTTPRoute (`2-self-service/go-service/skeleton`) omits the same API
+  defaults and will read OutOfSync. It is left alone until phase 6, because Argo Rollouts may own
+  its backend weights.
 
 - The Backstage ArgoCD and Kubernetes tabs are installed but not wired into the entity page. See
   `images/backstage/README.md`.
