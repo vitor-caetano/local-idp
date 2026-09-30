@@ -3,7 +3,6 @@
 import base64
 import json
 import os
-import re
 import subprocess
 import tempfile
 import time
@@ -100,22 +99,32 @@ def wait_for(predicate, timeout=300, interval=10, message="condition"):
     pytest.fail(f"timed out after {timeout}s waiting for {message} (last: {last})")
 
 
-# kubectl run --rm appends its deletion notice to stdout with no separator.
-_KUBECTL_DELETION_NOTICE = re.compile(r'\s*pod "[^"]+" deleted(?: from \S+ namespace)?\s*$')
-
-
 def incluster_curl(url, *curl_args, ns="default", timeout=120):
     """One-shot in-cluster curl. Returns (body, http_code)."""
     pod = "phasetest-curl-" + str(abs(hash((url, curl_args))) % 100000)
-    # -i is required: kubectl run --rm only streams stdout back, and reliably deletes the pod,
-    # when attached.
-    res = kubectl(
-        "run", pod, "-n", ns, "--rm", "-i", "--restart=Never",
+    # Detached, then read the logs once. Attached (kubectl run --rm -i), a curl that exits before
+    # kubectl attaches has its output streamed twice, once by the attach and once by the logs
+    # fallback, and the body stops parsing as JSON.
+    kubectl("delete", "pod", pod, "-n", ns, "--ignore-not-found", "--wait=true", check=False)
+    kubectl(
+        "run", pod, "-n", ns, "--restart=Never",
         "--image=curlimages/curl:8.11.0", "--command", "--",
         "curl", "-sS", "-m", "30", "-w", "\\n%{http_code}", *curl_args, url,
-        check=False, timeout=timeout,
     )
-    out = _KUBECTL_DELETION_NOTICE.sub("", res.stdout).rstrip("\n")
+    try:
+        deadline = time.time() + timeout
+        while True:
+            phase = kubectl("get", "pod", pod, "-n", ns, "-o", "jsonpath={.status.phase}",
+                            check=False).stdout
+            # curl exits non-zero on a connection error, so a Failed pod still carries the code.
+            if phase in ("Succeeded", "Failed"):
+                break
+            if time.time() > deadline:
+                raise AssertionError(f"pod {ns}/{pod} still {phase or 'absent'} after {timeout}s")
+            time.sleep(2)
+        out = kubectl("logs", pod, "-n", ns).stdout.rstrip("\n")
+    finally:
+        kubectl("delete", "pod", pod, "-n", ns, "--ignore-not-found", "--wait=false", check=False)
     body, _, code = out.rpartition("\n")
     return body, code
 
