@@ -38,7 +38,8 @@ container.
 **Phase 1.** ArgoCD reads `platform/` from the in-cluster Gitea, and all 25 foundation
 Applications (waves 0 to 6) are Synced and Healthy. `tests/test_phase_1_gitops_and_traffic.py`
 passes (6 of 6): `http://gitea.localtest.me` answers 301 to https from the host. The Backstage image
-`localhost:5001/local-idp/backstage:0.1.0` is built from Backstage 1.51.2. The repo is public at
+`localhost:5001/local-idp/backstage` is built from Backstage 1.51.2 (tag 0.1.0 then; 0.1.2 after the
+phase 6 fixes). The repo is public at
 https://github.com/vitor-caetano/local-idp.
 
 Phase 0's `test_cluster_is_bare` now fails by design: it asserts the pre-ArgoCD state.
@@ -56,10 +57,25 @@ Tools come from `devbox.json` (see `docs/prerequisites.md`).
 | 6 Golden path | Done 2026-09-30 |
 | 7 Governance | Done 2026-09-30 |
 
+## Added after the build
+
+- **`docs/golden-path.html`**: a visual walkthrough of the golden path, one diagram per stage, from
+  the Backstage template through the Gitea repo, Argo Events, the CI Workflow, the ApplicationSet,
+  the canary Rollout, and the request and scaling paths, plus the enforced policies and where to look
+  when a stage breaks. Open it locally with `open docs/golden-path.html`. A private published copy
+  is at https://claude.ai/artifact/K8hbUCeF8JLtRnbn6sZcLz; republish it after editing the file.
+- **Trusting the local CA is scripted.** `./provision/trust-ca.sh --install` trusts the root in the
+  macOS login keychain (no sudo; one password dialog), after removing any older
+  `local-idp-root-ca`, since every cluster generates a new CA under that name. `--remove` takes it
+  out, and `./provision/destroy.sh` now does too, along with `provision/local-idp-ca.crt`. A copy in
+  the System keychain is reported, not removed, because that needs sudo. The helpers are
+  `trust_ca` and `untrust_ca` in `provision/lib.sh`.
+
 ## Next steps
 
 1. Nothing is required. To rebuild from scratch, `./provision/destroy.sh` and start at phase 0; the
-   fixes recorded below are all in Git.
+   fixes recorded below are all in Git. After phase 1, run `./provision/trust-ca.sh --install` so the
+   browser trusts `*.localtest.me`.
 2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
    restart.
 
