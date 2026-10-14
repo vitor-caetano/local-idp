@@ -37,7 +37,7 @@ spec:
             # Where the catalog reads the golden-path template and the org file. set-git-source.sh
             # rewrites this together with every repoURL.
             - name: PLATFORM_RAW_BASE
-              value: "REPLACE_WITH_PLATFORM_RAW_BASE"
+              value: "http://gitea-http.gitea.svc:3000/platform/local-idp/raw/branch/main"
             - name: POSTGRES_HOST
               value: backstage-postgres.backstage.svc
             - name: POSTGRES_PORT
