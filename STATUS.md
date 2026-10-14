@@ -47,6 +47,13 @@ active Prometheus targets are up, none down: etcd, the scheduler, the controller
 kube-proxy are disabled rather than left failing. Loki holds logs from every namespace that runs a
 pod, so Alloy's single replica is reading the whole cluster.
 
+**Phase 4 passed again** (5 of 5) on its first run, with no changes. `gitea-config` created the
+`services` org and wrote one automation token to `argocd/gitea-scm-token`,
+`ci/gitea-ci-credentials` and `backstage/gitea-credentials`. The token authenticates against the
+Gitea API (200 on `/api/v1/user`). The org has one active push webhook, to
+`gitea-eventsource-svc.argo-events.svc:12000/push`. Nothing listens there until phase 6 adds the
+EventSource.
+
 ## As of 2026-09-30
 
 **Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and
