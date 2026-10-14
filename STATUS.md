@@ -36,6 +36,12 @@ Healthy. What differs from the earlier build:
 - `ARGOCD_AUTH_TOKEN` is not set for Backstage. The ArgoCD tab it serves is not wired (see Known
   open items), so nothing reads it yet.
 
+**Phase 2 passed again** (6 of 6) on its first run, with no changes: its components converged
+during phase 1, so there was no failing run to see first. The `openbao-seed` Job generated
+`secret/backstage-postgres`. Its hash matches in OpenBao, the `backstage-postgres` Secret, and the
+Postgres container, and a password login to Postgres succeeds. The four baseline ClusterPolicies are
+Ready, every rule in Audit.
+
 ## As of 2026-09-30
 
 **Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and
