@@ -17,6 +17,25 @@ The rebuild regenerates `platform/` from `spec/` (path B), rather than redeployi
 `kube-node-lease` and `local-path-storage`, 13 system pods. The first run failed once because a
 worker had joined seconds earlier and was not Ready yet; the rerun passed.
 
+**Phase 1 passed again** (6 of 6), on a `platform/` generated from the spec. The phase needs the
+whole foundation tree, not only the traffic components: `set-git-source.sh` reads the Backstage
+Application, and seeding starts every wave. All 25 Applications (waves 0 to 6) are Synced and
+Healthy. What differs from the earlier build:
+
+- Gitea's `ROOT_URL` is `http://gitea-http.gitea.svc:3000/`, so the clone URLs Gitea hands to
+  ArgoCD, CI and the SCM generator resolve inside pods. The UI is still at `gitea.localtest.me`.
+- The OpenBao root token is written once, in the chart values, and templated into the
+  `openbao-root-token` Secret through the chart's `extraObjects`.
+- Argo Workflows installs its minified CRDs as ordinary resources (`crds.full: false`) instead of
+  the full ones, which the chart applies from a hook Job that downloads them from GitHub.
+- `gitea-config` runs in `alpine/k8s:1.36.4`, now pinned in `components.yaml` as `job-tools`.
+- Four Applications read OutOfSync while Healthy. ESO and Kyverno webhooks add defaults, so the
+  ExternalSecrets and ClusterPolicies now spell them out. `argocd-values.yaml` ignores only what
+  cannot live in Git: the CRD `conversion: None` default, the empty metadata maps the Kyverno
+  chart renders on its CRDs, and Kyverno's deprecated spec-level `validationFailureAction`.
+- `ARGOCD_AUTH_TOKEN` is not set for Backstage. The ArgoCD tab it serves is not wired (see Known
+  open items), so nothing reads it yet.
+
 ## As of 2026-09-30
 
 **Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and
