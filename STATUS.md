@@ -33,8 +33,7 @@ Healthy. What differs from the earlier build:
   ExternalSecrets and ClusterPolicies now spell them out. `argocd-values.yaml` ignores only what
   cannot live in Git: the CRD `conversion: None` default, the empty metadata maps the Kyverno
   chart renders on its CRDs, and Kyverno's deprecated spec-level `validationFailureAction`.
-- `ARGOCD_AUTH_TOKEN` is not set for Backstage. The ArgoCD tab it serves is not wired (see Known
-  open items), so nothing reads it yet.
+- `ARGOCD_AUTH_TOKEN` was not set for Backstage at first. It is now: see "Added after the rebuild".
 
 **Phase 2 passed again** (6 of 6) on its first run, with no changes: its components converged
 during phase 1, so there was no failing run to see first. The `openbao-seed` Job generated
@@ -102,6 +101,17 @@ is Audit, and the other expects a bare pod to be admitted into `apps`.
 | 5 Developer portal | Done 2026-10-14 |
 | 6 Golden path | Done 2026-10-14 |
 | 7 Governance | Done 2026-10-14 |
+
+## Added after the rebuild
+
+- **Backstage has a read-only ArgoCD token.** The `argocd-token` Job in `backstage-config` signs in
+  as admin and mints a token for the `backstage` account (API key only, role
+  `readonly-with-logs`). It stores the token as `backstage/argocd-credentials` and keeps a stored
+  token that still works, so reruns do not add more tokens. Backstage reads it as
+  `ARGOCD_AUTH_TOKEN`. Through `https://backstage.localtest.me/api/proxy/argocd/api`, reading
+  `svc-hello-go` returns 200, and a sync request returns 403 for `sub: backstage`. Minting needs
+  `argocd-initial-admin-secret`; delete it and a rerun cannot mint, while the stored token keeps
+  working.
 
 ## As of 2026-09-30
 
@@ -237,4 +247,5 @@ never loads the UI or runs a template.
 ## Known open items
 
 - The Backstage ArgoCD and Kubernetes tabs are installed but not wired into the entity page. See
-  `images/backstage/README.md`.
+  `images/backstage/README.md`. Their backends are ready: the ArgoCD proxy has its token, and the
+  Kubernetes plugin has its service account.
