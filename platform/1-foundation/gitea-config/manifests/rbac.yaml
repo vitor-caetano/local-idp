@@ -1,86 +1,104 @@
-# ABOUTME: Service account and RBAC for the Gitea seed Job. Each Role lets it write Secrets in one
-# ABOUTME: namespace that consumes the automation token: argocd, ci and backstage.
----
+# ABOUTME: The gitea-config Job's identity: it reads the seed credentials in gitea and writes the token
+# ABOUTME: Secrets in argocd, ci and backstage. Nothing else, and no cluster-wide grant.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gitea-seed
+  name: gitea-config
   namespace: gitea
-  labels:
-    app.kubernetes.io/part-of: local-idp
 ---
-# argocd: gitea-scm-token for the ApplicationSet. Also reads argocd-initial-admin-secret to mint the
-# Backstage account token.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: gitea-seed-secret-writer
+  name: gitea-config-read-seed
+  namespace: gitea
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["gitea-seed-creds"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitea-config-read-seed
+  namespace: gitea
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gitea-config-read-seed
+subjects:
+  - kind: ServiceAccount
+    name: gitea-config
+    namespace: gitea
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitea-config-write-secrets
   namespace: argocd
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["create", "update", "get", "delete"]
+    verbs: ["get", "create", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
   namespace: argocd
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
 subjects:
   - kind: ServiceAccount
-    name: gitea-seed
+    name: gitea-config
     namespace: gitea
 ---
-# ci: gitea-ci-credentials, which the pipeline pushes the image-tag commit with.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
   namespace: ci
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["create", "update", "get", "delete"]
+    verbs: ["get", "create", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
   namespace: ci
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
 subjects:
   - kind: ServiceAccount
-    name: gitea-seed
+    name: gitea-config
     namespace: gitea
 ---
-# backstage: backstage-integrations, the Gitea and ArgoCD credentials Backstage reads.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
   namespace: backstage
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["create", "update", "get", "delete"]
+    verbs: ["get", "create", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
   namespace: backstage
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: gitea-seed-secret-writer
+  name: gitea-config-write-secrets
 subjects:
   - kind: ServiceAccount
-    name: gitea-seed
+    name: gitea-config
     namespace: gitea

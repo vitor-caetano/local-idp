@@ -1,14 +1,12 @@
-# ABOUTME: cert-manager, first in the foundation. Issues the wildcard certificate the Gateway
-# ABOUTME: terminates TLS with, signed by the local root CA in cert-manager-issuers.
+# ABOUTME: Wave 1. cert-manager with its CRDs. The issuers and the wildcard certificate come in wave 2,
+# ABOUTME: from cert-manager-issuers and platform-gateway, once these CRDs exist.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: cert-manager
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
   source:
@@ -16,9 +14,12 @@ spec:
     chart: cert-manager
     targetRevision: v1.20.2
     helm:
+      releaseName: cert-manager
       valuesObject:
         crds:
           enabled: true
+          # Deleting the CRDs deletes every Certificate in the cluster with them.
+          keep: true
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
@@ -27,11 +28,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

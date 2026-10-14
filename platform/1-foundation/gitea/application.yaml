@@ -1,21 +1,15 @@
-# ABOUTME: In-cluster Gitea. Holds the platform repo in Gitea mode and the golden-path service repos
-# ABOUTME: in every mode. Lean: SQLite, one replica. Applied directly by seed-gitea.sh first.
+# ABOUTME: Wave 1. The in-cluster Git host. seed-gitea.sh applies this file directly, before ArgoCD
+# ABOUTME: has a Git source, then ArgoCD adopts it from the seeded tree. Its chart comes from dl.gitea.com.
 #
-# This Application pulls its chart from dl.gitea.com, not from Gitea, which is what lets
-# seed-gitea.sh apply it before any Git host exists. ArgoCD adopts the same object when the root
-# App-of-Apps syncs, so there is one copy of these values.
-#
-# The admin password is inline because this is a throwaway local instance. seed-gitea.sh derives
-# the gitea-seed-creds Secret from this file, so nothing else holds a second copy.
+# The admin account below is a local dev value. seed-gitea.sh reads it from this file into the
+# gitea-seed-creds Secret, which every other consumer reads, so there is one copy (defect class 5).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: gitea
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
   source:
@@ -23,45 +17,53 @@ spec:
     chart: gitea
     targetRevision: 12.6.0
     helm:
+      releaseName: gitea
       valuesObject:
-        replicaCount: 1
-        # SQLite requires a single replica; no rolling surge.
+        gitea:
+          admin:
+            username: gitea-admin
+            password: "local-dev-only"
+            email: "gitea-admin@localtest.me"
+            passwordMode: keepUpdated
+          config:
+            # Gitea builds every clone URL and webhook payload URL from ROOT_URL, and the consumers
+            # of those (ArgoCD, the CI pipeline, the ApplicationSet SCM generator) are in-cluster.
+            # gitea.localtest.me resolves to 127.0.0.1 inside a pod, so it cannot be the root.
+            # The browser still reaches the UI at https://gitea.localtest.me through the Gateway.
+            server:
+              DOMAIN: gitea-http.gitea.svc
+              ROOT_URL: http://gitea-http.gitea.svc:3000/
+            database:
+              DB_TYPE: sqlite3
+            # No Valkey: one replica keeps sessions, cache and queues in process.
+            session:
+              PROVIDER: memory
+            cache:
+              ADAPTER: memory
+            queue:
+              TYPE: level
+            # Webhooks to private addresses are refused by default, and the CI EventSource is a
+            # ClusterIP. Without this, delivery fails and nothing reports it.
+            webhook:
+              ALLOWED_HOST_LIST: private
+            service:
+              DISABLE_REGISTRATION: true
+        # SQLite on one RWO volume: never run two pods at once.
         strategy:
           type: Recreate
-        postgresql-ha:
-          enabled: false
-        postgresql:
-          enabled: false
-        valkey-cluster:
-          enabled: false
-        valkey:
-          enabled: false
+          rollingUpdate: null
         persistence:
           enabled: true
           size: 5Gi
-        gitea:
-          # admin MUST be nested under gitea. At the top level the chart ignores it and keeps its
-          # own default password, which then 401s every authenticated API call.
-          admin:
-            username: gitea_admin
-            # Local dev only, ephemeral. Not a real credential.
-            password: "Local-Dev-Only1!"
-            email: "admin@local-idp.dev"
-          config:
-            database:
-              DB_TYPE: sqlite3
-            server:
-              # The in-cluster address, so clone URLs in API responses (which the ApplicationSet
-              # and the CI pipeline use) resolve inside the cluster. The browser UI is at
-              # https://gitea.localtest.me; links it renders point at this internal address.
-              ROOT_URL: http://gitea-http.gitea.svc:3000/
-            service:
-              DISABLE_REGISTRATION: true
-            webhook:
-              # Gitea refuses to deliver webhooks to private addresses by default. The Argo Events
-              # webhook is a ClusterIP, which is private, so without this every push is silently
-              # dropped and CI never starts.
-              ALLOWED_HOST_LIST: private
+          storageClass: standard
+        postgresql:
+          enabled: false
+        postgresql-ha:
+          enabled: false
+        valkey:
+          enabled: false
+        valkey-cluster:
+          enabled: false
   destination:
     server: https://kubernetes.default.svc
     namespace: gitea
@@ -70,11 +72,5 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m
+      - CreateNamespace=true

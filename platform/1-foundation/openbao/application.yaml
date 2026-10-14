@@ -1,18 +1,12 @@
-# ABOUTME: OpenBao (Linux Foundation, MPL-2.0 fork of Vault) as the in-cluster secret backend that
-# ABOUTME: External Secrets Operator pulls from. Dev mode, wave 1.
-#
-# Dev mode runs a single unsealed in-memory pod with a fixed root token and KV v2 at secret/. Right
-# for a laptop cluster, never for production. A pod restart empties it; the ExternalSecrets keep the
-# Secrets they already wrote, and re-syncing openbao-config re-seeds it.
+# ABOUTME: Wave 3. OpenBao in dev mode: in memory, unsealed, a fixed root token. A restart empties it;
+# ABOUTME: provision/resume-cluster.sh refills it. Local experiments only, never production.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: openbao
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:
@@ -20,13 +14,23 @@ spec:
     chart: openbao
     targetRevision: 0.28.4
     helm:
+      releaseName: openbao
       valuesObject:
         server:
           dev:
             enabled: true
-            devRootToken: "root"
+            # A documented local dev value, and the only copy. The Secret below is templated from it, and
+            # External Secrets, the seed Job and resume-cluster.sh all read that Secret.
+            devRootToken: "local-dev-only"
         injector:
           enabled: false
+        extraObjects:
+          - apiVersion: v1
+            kind: Secret
+            metadata:
+              name: openbao-root-token
+            stringData:
+              token: '{{ .Values.server.dev.devRootToken }}'
   destination:
     server: https://kubernetes.default.svc
     namespace: openbao
@@ -35,11 +39,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

@@ -1,5 +1,5 @@
-# ABOUTME: Argo Rollouts. Golden-path services deploy as a Rollout with a replica-weighted canary.
-# ABOUTME: No traffic-router plugin: the canary weight is the share of pods, not of requests.
+# ABOUTME: Wave 3. The Argo Rollouts controller and CRDs. Golden-path services run as a replica-weighted
+# ABOUTME: canary, so no traffic-router plugin is configured.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -7,14 +7,16 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "3"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: https://argoproj.github.io/argo-helm
     chart: argo-rollouts
     targetRevision: 2.41.0
+    helm:
+      releaseName: argo-rollouts
+      valuesObject:
+        installCRDs: true
   destination:
     server: https://kubernetes.default.svc
     namespace: argo-rollouts
@@ -23,11 +25,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

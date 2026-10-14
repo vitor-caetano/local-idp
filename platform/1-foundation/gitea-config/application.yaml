@@ -1,34 +1,23 @@
-# ABOUTME: Seeds Gitea for self-service: the services org, one automation token handed to the three
-# ABOUTME: consumers that need it, the org webhook that starts CI, and Backstage's integration Secret.
+# ABOUTME: Wave 4. Prepares Gitea for the golden path: the services org, one automation token handed to
+# ABOUTME: argocd, ci and backstage as Secrets, and the org push webhook to the Argo Events EventSource.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: gitea-config
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "3"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   project: default
   source:
-    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
     targetRevision: main
     path: platform/1-foundation/gitea-config/manifests
-    directory:
-      recurse: true
   destination:
     server: https://kubernetes.default.svc
-    namespace: gitea
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

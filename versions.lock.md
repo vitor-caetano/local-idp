@@ -12,6 +12,7 @@ of truth; this file is the quick lookup. The table below is generated: run
 | Local image registry | registry:3.1.2 | n/a (image) | n/a | n/a |
 | Argo CD | v3.4.4 | argo-cd | 9.5.22 | argoproj.github.io/argo-helm |
 | Gitea | 1.26.1 | gitea | 12.6.0 | dl.gitea.com/charts/ |
+| Job tools image (kubectl, curl, jq) | alpine/k8s:1.36.4 | n/a (image) | n/a | n/a |
 | cert-manager | v1.20.2 | cert-manager | v1.20.2 | charts.jetstack.io |
 | Envoy Gateway | v1.9.2 | gateway-helm | 1.9.2 | oci://docker.io/envoyproxy |
 | OpenBao | v2.5.5 | openbao | 0.28.4 | openbao.github.io/openbao-helm |

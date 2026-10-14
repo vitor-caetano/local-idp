@@ -1,24 +1,18 @@
-# ABOUTME: GatewayClass, EnvoyProxy, the platform Gateway, its wildcard certificate, and the
-# ABOUTME: HTTP to HTTPS redirect. Every UI and every golden-path service attaches to this Gateway.
----
-# Kind has no load balancer, so a LoadBalancer Service would sit Pending forever. NodePort with
-# fixed ports lines up with extraPortMappings in provision/kind-config.yaml: host 80 -> 30080,
-# host 443 -> 30443. Envoy Gateway names Service ports after the listener ports, and the Service
-# port list merges on `port`, so the patch pins the NodePort of the 80 and 443 entries.
+# ABOUTME: GatewayClass, the EnvoyProxy that pins the data plane to fixed NodePorts, the Gateway, its
+# ABOUTME: wildcard certificate, and the HTTP-to-HTTPS redirect. API defaults are spelled out so it stays Synced.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
-  name: kind-nodeport
-  namespace: envoy-gateway-system
+  name: nodeport-proxy
+  namespace: platform-gateway
 spec:
   provider:
     type: Kubernetes
     kubernetes:
       envoyService:
         type: NodePort
-        # Kind maps host ports 80 and 443 onto the control-plane node only, and the Envoy pod lands on a
-        # worker. With the default Local policy, a node without an Envoy pod drops external NodePort
-        # traffic, so the host sees a timeout. Cluster forwards it to the pod on whichever node.
+        # Envoy Gateway defaults to Local. Kind maps host ports onto the control plane, and Envoy runs
+        # on a worker, so Local drops every packet that arrives through the mapping.
         externalTrafficPolicy: Cluster
         patch:
           type: StrategicMerge
@@ -26,23 +20,24 @@ spec:
             spec:
               ports:
                 - port: 80
+                  protocol: TCP
                   nodePort: 30080
                 - port: 443
+                  protocol: TCP
                   nodePort: 30443
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
-  name: envoy
+  name: envoy-gateway
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
   parametersRef:
     group: gateway.envoyproxy.io
     kind: EnvoyProxy
-    name: kind-nodeport
-    namespace: envoy-gateway-system
+    name: nodeport-proxy
+    namespace: platform-gateway
 ---
-# One certificate for every *.localtest.me host, signed by the local CA.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -52,11 +47,11 @@ spec:
   secretName: wildcard-localtest-me
   dnsNames:
     - "*.localtest.me"
-  duration: 2160h
+    - localtest.me
   issuerRef:
-    name: local-idp-ca
-    kind: ClusterIssuer
     group: cert-manager.io
+    kind: ClusterIssuer
+    name: local-idp-ca
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -64,18 +59,16 @@ metadata:
   name: platform-gateway
   namespace: platform-gateway
 spec:
-  gatewayClassName: envoy
+  gatewayClassName: envoy-gateway
   listeners:
-    # Plain HTTP exists only to redirect. Same-namespace routes only, so nothing else can serve on it.
+    # Only the redirect route below attaches here.
     - name: http
       protocol: HTTP
       port: 80
-      hostname: "*.localtest.me"
       allowedRoutes:
         namespaces:
           from: Same
-    # Routes from any namespace may attach. On a shared cluster this would be a Selector on a
-    # namespace label; on a single-person laptop cluster All keeps the golden path simple.
+    # Routes from any namespace attach here, each with its own hostname.
     - name: https
       protocol: HTTPS
       port: 443
@@ -93,7 +86,7 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: redirect-to-https
+  name: http-to-https-redirect
   namespace: platform-gateway
 spec:
   parentRefs:

@@ -1,5 +1,5 @@
-# ABOUTME: Argo Workflows. Runs the golden-path CI pipeline in the ci namespace. Server auth mode,
-# ABOUTME: so the UI at https://workflows.localtest.me opens without a token on a laptop cluster.
+# ABOUTME: Wave 3. Argo Workflows, the CI engine. Workflows run in ci as the ci-runner service account the
+# ABOUTME: chart creates there. The server runs in server auth mode, right for one person on a laptop.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -7,8 +7,6 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "3"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
@@ -16,15 +14,16 @@ spec:
     chart: argo-workflows
     targetRevision: 1.0.16
     helm:
+      releaseName: argo-workflows
       valuesObject:
-        # v4 ships full-validation CRDs that exceed the client-side apply annotation limit;
-        # ServerSideApply below handles them.
+        # The full CRDs are too big for a plain apply, so the chart installs them from a hook Job that
+        # downloads them from GitHub at sync time. The minified CRDs are ordinary resources ArgoCD
+        # applies and tracks like any other.
         crds:
           install: true
+          full: false
         controller:
-          replicas: 1
-          # Workflows run only in ci. The chart creates the workflow service account and its RBAC
-          # (including workflowtaskresults, which the v3.4+ executor needs) in these namespaces.
+          # The chart creates the workflow service account and its Role in each of these namespaces.
           workflowNamespaces:
             - ci
         workflow:
@@ -34,8 +33,7 @@ spec:
           rbac:
             create: true
         server:
-          # Server mode uses the server's own service account for every UI request. Correct for a
-          # single-person local cluster, never for a shared one.
+          # No login: the UI and API act as the server's own service account.
           authModes:
             - server
   destination:
@@ -46,11 +44,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

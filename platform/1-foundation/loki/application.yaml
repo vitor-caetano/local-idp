@@ -1,25 +1,24 @@
-# ABOUTME: Loki in SingleBinary mode with filesystem storage. Alloy ships pod logs to it through
-# ABOUTME: the loki-gateway Service, which is also Grafana's Loki datasource URL.
+# ABOUTME: Wave 3. Loki as one binary on filesystem storage, no caches, no canary. Alloy ships to it
+# ABOUTME: through loki-gateway, which Grafana and the phase 3 test also read from.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: loki
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:
-    # grafana-community repo: the OSS charts in the old grafana repo are frozen.
     repoURL: https://grafana-community.github.io/helm-charts
     chart: loki
     targetRevision: 17.4.7
     helm:
+      releaseName: loki
       valuesObject:
-        deploymentMode: SingleBinary
+        deploymentMode: Monolithic
         loki:
+          # One tenant on a laptop. Without this every client must send an X-Scope-OrgID header.
           auth_enabled: false
           commonConfig:
             replication_factor: 1
@@ -27,17 +26,27 @@ spec:
             type: filesystem
           schemaConfig:
             configs:
-              - from: "2024-04-01"
+              - from: "2026-01-01"
                 store: tsdb
                 object_store: filesystem
                 schema: v13
                 index:
                   prefix: index_
                   period: 24h
+          limits_config:
+            retention_period: 72h
         singleBinary:
           replicas: 1
-        minio:
-          enabled: false
+          persistence:
+            size: 5Gi
+            storageClass: standard
+        # The simple scalable targets default to three replicas each; zero them for one binary.
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        backend:
+          replicas: 0
         chunksCache:
           enabled: false
         resultsCache:
@@ -46,13 +55,6 @@ spec:
           enabled: false
         test:
           enabled: false
-        # The scalable-mode components, off in SingleBinary.
-        backend:
-          replicas: 0
-        read:
-          replicas: 0
-        write:
-          replicas: 0
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
@@ -61,11 +63,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

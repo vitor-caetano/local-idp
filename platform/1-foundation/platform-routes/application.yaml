@@ -1,9 +1,5 @@
-# ABOUTME: HTTPRoutes that publish every platform UI at https://<name>.localtest.me through the
-# ABOUTME: platform Gateway. Last wave, so every backend Service exists when its route is assessed.
-#
-# The HTTPRoute health check in argocd-values.yaml reports a route whose backend Service is missing
-# as Progressing (ResolvedRefs=False). Syncing these before the backends would hold this
-# Application, and with it every later wave, until they appear.
+# ABOUTME: Wave 6. One HTTPRoute per platform UI, each in its own component's namespace, all attached to
+# ABOUTME: the https listener of platform-gateway. Lands last, once every backend it points at exists.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -11,28 +7,17 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "6"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
     targetRevision: main
     path: platform/1-foundation/platform-routes/manifests
-    directory:
-      recurse: true
   destination:
     server: https://kubernetes.default.svc
-    namespace: platform-gateway
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

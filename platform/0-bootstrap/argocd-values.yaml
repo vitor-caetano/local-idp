@@ -1,142 +1,157 @@
-# ABOUTME: Helm values for the bootstrap ArgoCD install. Serves plain HTTP behind the Gateway and
-# ABOUTME: teaches ArgoCD to assess the custom resources this platform runs.
-#
-# ArgoCD reports an Application Healthy when it cannot assess the resources inside it. Every custom
-# resource whose readiness the platform depends on, and which ArgoCD has no built-in check for,
-# gets a check here. tests/test_argocd_health_checks.py lists which kinds rely on a built-in check
-# and fails when a new kind arrives that is neither.
-#
-# Every check returns Progressing, not Degraded, on a False condition: a cold start legitimately
-# spends a minute there, and a dashboard that goes red during normal startup teaches people to
-# ignore red. Progressing is enough, because it is not Healthy.
+# ABOUTME: Values for the argo-cd chart, installed once by provision/bootstrap-argocd.sh. Carries the
+# ABOUTME: health checks for every custom resource the platform waits on, so they apply from day one.
+global:
+  domain: argocd.localtest.me
+
 configs:
   params:
-    # TLS terminates at the Gateway with the local CA. Without this, the Gateway would forward
-    # plain HTTP to a server that only speaks HTTPS and the UI would loop on redirects.
+    # TLS terminates at the platform Gateway; ArgoCD serves plain HTTP behind it.
     server.insecure: true
+
+  # Envoy Gateway's chart lives in an OCI registry. ArgoCD needs the repository declared with
+  # enableOCI before a Helm source can pull from it.
+  repositories:
+    envoyproxy-oci:
+      name: envoyproxy
+      type: helm
+      url: docker.io/envoyproxy
+      enableOCI: "true"
+
   cm:
-    # A local account for Backstage's ArgoCD plugin. An account token carries no exp claim, so the
-    # portal's ArgoCD tab does not stop working a day after the cluster is built.
+    # Read-only account for the Backstage ArgoCD plugin, which reads through the Backstage proxy.
     accounts.backstage: apiKey
 
-    # Application: ArgoCD stopped assessing child Application health in 1.8, so sync waves in an
-    # App-of-Apps only order creation, and wave 5 starts while wave 0 is still installing CRDs. This
-    # restores the assessment, so each wave waits for the previous one to be Healthy. The cost: a
-    # component stuck in an early wave holds back every later one, which is where you want to look.
+    # ArgoCD stopped assessing child Application health in 1.8, which turns sync waves in an
+    # App-of-Apps into creation order. This restores it, so each wave waits for the one before.
     resource.customizations.health.argoproj.io_Application: |
       hs = {}
       hs.status = "Progressing"
       hs.message = ""
-      if obj.status ~= nil and obj.status.health ~= nil then
-        hs.status = obj.status.health.status
-        if obj.status.health.message ~= nil then
-          hs.message = obj.status.health.message
-        end
-      end
-      return hs
-
-    # Gateway: Programmed is the condition that means Envoy has a data plane for it.
-    resource.customizations.health.gateway.networking.k8s.io_Gateway: |
-      hs = {}
-      if obj.status ~= nil and obj.status.conditions ~= nil then
-        for i, c in ipairs(obj.status.conditions) do
-          if c.type == "Programmed" then
-            if c.status == "True" then
-              hs.status = "Healthy"
-            else
-              hs.status = "Progressing"
-            end
-            hs.message = c.message
-            return hs
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
           end
         end
       end
-      hs.status = "Progressing"
-      hs.message = "Waiting for the Gateway to be programmed"
       return hs
 
-    # HTTPRoute: a route whose parentRefs names nothing real sits Accepted=False with "no parent
-    # found" while its Application reads green (defect class 7). This turns that visible.
+    # Programmed is the condition that means Envoy is serving the listeners.
+    resource.customizations.health.gateway.networking.k8s.io_Gateway: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = "Waiting for the Gateway to be programmed"
+      if obj.status ~= nil and obj.status.conditions ~= nil then
+        for _, c in ipairs(obj.status.conditions) do
+          if c.type == "Accepted" and c.status == "False" then
+            hs.status = "Degraded"
+            hs.message = c.message
+            return hs
+          end
+          if c.type == "Programmed" then
+            if c.status == "True" then
+              hs.status = "Healthy"
+              hs.message = c.message
+            elseif c.reason ~= "Pending" then
+              hs.status = "Degraded"
+              hs.message = c.message
+            end
+          end
+        end
+      end
+      return hs
+
+    # A route whose parent does not exist, or whose backend does not resolve, serves nothing.
     resource.customizations.health.gateway.networking.k8s.io_HTTPRoute: |
       hs = {}
+      hs.status = "Progressing"
+      hs.message = "Waiting for a parent Gateway to accept the route"
       if obj.status ~= nil and obj.status.parents ~= nil and #obj.status.parents > 0 then
-        for i, p in ipairs(obj.status.parents) do
-          if p.conditions ~= nil then
-            for j, c in ipairs(p.conditions) do
-              if (c.type == "Accepted" or c.type == "ResolvedRefs") and c.status ~= "True" then
-                hs.status = "Progressing"
-                hs.message = c.type .. ": " .. (c.message or c.reason or "not true")
+        for _, parent in ipairs(obj.status.parents) do
+          if parent.conditions ~= nil then
+            for _, c in ipairs(parent.conditions) do
+              if (c.type == "Accepted" or c.type == "ResolvedRefs") and c.status == "False" then
+                hs.status = "Degraded"
+                hs.message = c.type .. ": " .. (c.message or c.reason or "")
                 return hs
               end
             end
           end
         end
         hs.status = "Healthy"
-        hs.message = "Accepted by every parent Gateway"
-        return hs
+        hs.message = "Accepted by every parent"
       end
-      hs.status = "Progressing"
-      hs.message = "No Gateway has accepted this route"
       return hs
 
-    # Argo Events: every condition True means the controller deployed it and its inputs resolved.
     resource.customizations.health.argoproj.io_EventBus: |
       hs = {}
+      hs.status = "Progressing"
+      hs.message = "Waiting for the EventBus to be deployed"
       if obj.status ~= nil and obj.status.conditions ~= nil then
-        for i, c in ipairs(obj.status.conditions) do
-          if c.status ~= "True" then
-            hs.status = "Progressing"
-            hs.message = c.type .. ": " .. (c.message or "not true")
+        for _, c in ipairs(obj.status.conditions) do
+          if c.status == "False" then
+            hs.status = "Degraded"
+            hs.message = c.type .. ": " .. (c.message or c.reason or "")
             return hs
           end
+          if c.type == "Deployed" and c.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "Deployed"
+          end
         end
-        hs.status = "Healthy"
-        hs.message = "EventBus deployed"
-        return hs
       end
-      hs.status = "Progressing"
-      hs.message = "Waiting for the EventBus to deploy"
       return hs
 
     resource.customizations.health.argoproj.io_EventSource: |
       hs = {}
+      hs.status = "Progressing"
+      hs.message = "Waiting for the EventSource to be deployed"
       if obj.status ~= nil and obj.status.conditions ~= nil then
-        for i, c in ipairs(obj.status.conditions) do
-          if c.status ~= "True" then
-            hs.status = "Progressing"
-            hs.message = c.type .. ": " .. (c.message or "not true")
+        for _, c in ipairs(obj.status.conditions) do
+          if c.status == "False" then
+            hs.status = "Degraded"
+            hs.message = c.type .. ": " .. (c.message or c.reason or "")
             return hs
           end
+          if c.type == "Deployed" and c.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "Deployed"
+          end
         end
-        hs.status = "Healthy"
-        hs.message = "EventSource deployed"
-        return hs
       end
-      hs.status = "Progressing"
-      hs.message = "Waiting for the EventSource to deploy"
       return hs
 
     resource.customizations.health.argoproj.io_Sensor: |
       hs = {}
+      hs.status = "Progressing"
+      hs.message = "Waiting for the Sensor to be deployed"
       if obj.status ~= nil and obj.status.conditions ~= nil then
-        for i, c in ipairs(obj.status.conditions) do
-          if c.status ~= "True" then
-            hs.status = "Progressing"
-            hs.message = c.type .. ": " .. (c.message or "not true")
+        for _, c in ipairs(obj.status.conditions) do
+          if c.status == "False" then
+            hs.status = "Degraded"
+            hs.message = c.type .. ": " .. (c.message or c.reason or "")
             return hs
           end
+          if c.type == "Deployed" and c.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "Deployed"
+          end
         end
-        hs.status = "Healthy"
-        hs.message = "Sensor deployed"
-        return hs
       end
-      hs.status = "Progressing"
-      hs.message = "Waiting for the Sensor to deploy"
       return hs
 
   rbac:
-    # Read-only, and only what the Backstage plugin reads. `g,` binds the account to the role.
+    # ArgoCD 3.x: logs need an explicit grant. The backstage account reads, nothing more.
     policy.csv: |
-      p, role:backstage-readonly, applications, get, */*, allow
-      p, role:backstage-readonly, projects, get, *, allow
-      g, backstage, role:backstage-readonly
+      p, role:readonly-with-logs, applications, get, */*, allow
+      p, role:readonly-with-logs, logs, get, */*, allow
+      p, role:readonly-with-logs, projects, get, *, allow
+      p, role:readonly-with-logs, clusters, get, *, allow
+      g, backstage, role:readonly-with-logs
+
+# One person on a laptop signs in as admin. Dex and notifications add pods and nothing else here.
+dex:
+  enabled: false
+notifications:
+  enabled: false

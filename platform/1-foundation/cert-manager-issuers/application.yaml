@@ -1,34 +1,23 @@
-# ABOUTME: The local certificate authority: a self-signed root and the CA ClusterIssuer that signs
-# ABOUTME: every platform certificate. Syncs after cert-manager's CRDs exist (wave 1).
+# ABOUTME: Wave 2. The local CA: a self-signed issuer mints the root, and the local-idp-ca ClusterIssuer
+# ABOUTME: signs with it. trust-ca.sh exports the root from the local-idp-root-ca Secret.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: cert-manager-issuers
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   project: default
   source:
-    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
     targetRevision: main
     path: platform/1-foundation/cert-manager-issuers/manifests
-    directory:
-      recurse: true
   destination:
     server: https://kubernetes.default.svc
-    namespace: cert-manager
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

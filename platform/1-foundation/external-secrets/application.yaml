@@ -1,14 +1,12 @@
-# ABOUTME: External Secrets Operator. Projects OpenBao secrets into Kubernetes Secrets, so no
-# ABOUTME: application reads OpenBao directly and no secret value lives in Git.
+# ABOUTME: Wave 3. External Secrets Operator and its CRDs. The openbao ClusterSecretStore and the seed Job
+# ABOUTME: arrive in wave 4 from openbao-config.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: external-secrets
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:
@@ -16,6 +14,7 @@ spec:
     chart: external-secrets
     targetRevision: 2.6.0
     helm:
+      releaseName: external-secrets
       valuesObject:
         installCRDs: true
   destination:
@@ -26,11 +25,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

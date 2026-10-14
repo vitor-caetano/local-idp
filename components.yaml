@@ -93,6 +93,19 @@ components:
     phase: 1
     notes: "SQLite, one replica. Applied directly by seed-gitea.sh, then adopted by ArgoCD."
 
+  - name: job-tools
+    display_name: "Job tools image (kubectl, curl, jq)"
+    plane: foundation
+    project_url: https://github.com/alpine-docker/k8s
+    install_method: image
+    chart_repo: null
+    chart_name: null
+    chart_version: null
+    app_version: "alpine/k8s:1.36.4"
+    namespace: gitea
+    phase: 4
+    notes: "Runs the gitea-config Job, which needs kubectl, curl and jq together. No non-root user, so the Job pins uid 65534."
+
   # --- Foundation: traffic and TLS ---
   - name: cert-manager
     display_name: "cert-manager"

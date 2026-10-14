@@ -1,0 +1,128 @@
+# ABOUTME: The foundation baseline, reported in PolicyReports and never enforced. Rule-level
+# ABOUTME: validate.failureAction, since the spec-level validationFailureAction is deprecated.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-limits
+  annotations:
+    policies.kyverno.io/title: Require resource limits
+    policies.kyverno.io/description: >-
+      Every container sets a memory limit and a CPU request, so one pod cannot starve its node.
+spec:
+  background: true
+  rules:
+    - name: require-limits
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
+        failureAction: Audit
+        message: "Every container needs resources.limits.memory and resources.requests.cpu."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                  requests:
+                    cpu: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-containers
+  annotations:
+    policies.kyverno.io/title: Disallow privileged containers
+    policies.kyverno.io/description: >-
+      No container runs privileged.
+spec:
+  background: true
+  rules:
+    - name: no-privileged
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
+        failureAction: Audit
+        message: "Privileged containers are not allowed."
+        pattern:
+          spec:
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-run-as-non-root
+  annotations:
+    policies.kyverno.io/title: Require runAsNonRoot
+    policies.kyverno.io/description: >-
+      Every pod or container declares runAsNonRoot: true.
+spec:
+  background: true
+  rules:
+    - name: run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
+        failureAction: Audit
+        message: "Set securityContext.runAsNonRoot to true on the pod or every container."
+        anyPattern:
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+              containers:
+                - =(securityContext):
+                    =(runAsNonRoot): true
+          - spec:
+              containers:
+                - securityContext:
+                    runAsNonRoot: true
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow the latest tag
+    policies.kyverno.io/description: >-
+      Every image names an explicit tag other than latest, so a rollout is reproducible.
+spec:
+  background: true
+  rules:
+    - name: require-explicit-tag
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      validate:
+        # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
+        failureAction: Audit
+        message: "Images need an explicit tag other than :latest."
+        pattern:
+          spec:
+            containers:
+              - image: "*:* & !*:latest"

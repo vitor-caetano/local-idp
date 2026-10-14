@@ -1,45 +1,23 @@
-# ABOUTME: Wires External Secrets to OpenBao: the ClusterSecretStore, the dev token, a seed Job,
-# ABOUTME: and a demo ExternalSecret. Syncs after both are up (wave 2).
+# ABOUTME: Wave 4. The openbao ClusterSecretStore, the Job that seeds OpenBao, and a demo ExternalSecret
+# ABOUTME: that proves the path from OpenBao to a Kubernetes Secret end to end.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: openbao-config
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   project: default
   source:
-    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
     targetRevision: main
     path: platform/1-foundation/openbao-config/manifests
-    directory:
-      recurse: true
   destination:
     server: https://kubernetes.default.svc
-    namespace: openbao
-  # External Secrets defaults nested fields onto the ExternalSecret after apply, which the manifest
-  # does not set, so ArgoCD sees drift and the app never reaches Synced. Ignore the defaulted fields.
-  ignoreDifferences:
-    - group: external-secrets.io
-      kind: ExternalSecret
-      jqPathExpressions:
-        - .spec.data[].remoteRef.conversionStrategy
-        - .spec.data[].remoteRef.decodingStrategy
-        - .spec.data[].remoteRef.metadataPolicy
-        - .spec.data[].remoteRef.nullBytePolicy
-        - .spec.target.deletionPolicy
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

@@ -1,6 +1,5 @@
-# ABOUTME: One HTTPRoute per platform UI, each in its backend's namespace so no ReferenceGrant is
-# ABOUTME: needed. Service names follow each chart's release naming; check them when a chart moves.
----
+# ABOUTME: The platform UIs at https://<name>.localtest.me. API defaults (parentRef group and kind,
+# ABOUTME: backendRef group, kind and weight, the PathPrefix match) are spelled out so ArgoCD stays Synced.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -13,7 +12,8 @@ spec:
       name: platform-gateway
       namespace: platform-gateway
       sectionName: https
-  hostnames: ["argocd.localtest.me"]
+  hostnames:
+    - argocd.localtest.me
   rules:
     - matches:
         - path:
@@ -38,7 +38,8 @@ spec:
       name: platform-gateway
       namespace: platform-gateway
       sectionName: https
-  hostnames: ["gitea.localtest.me"]
+  hostnames:
+    - gitea.localtest.me
   rules:
     - matches:
         - path:
@@ -63,7 +64,8 @@ spec:
       name: platform-gateway
       namespace: platform-gateway
       sectionName: https
-  hostnames: ["grafana.localtest.me"]
+  hostnames:
+    - grafana.localtest.me
   rules:
     - matches:
         - path:
@@ -79,7 +81,7 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: argo-workflows
+  name: workflows
   namespace: argo
 spec:
   parentRefs:
@@ -88,7 +90,8 @@ spec:
       name: platform-gateway
       namespace: platform-gateway
       sectionName: https
-  hostnames: ["workflows.localtest.me"]
+  hostnames:
+    - workflows.localtest.me
   rules:
     - matches:
         - path:
@@ -113,7 +116,8 @@ spec:
       name: platform-gateway
       namespace: platform-gateway
       sectionName: https
-  hostnames: ["backstage.localtest.me"]
+  hostnames:
+    - backstage.localtest.me
   rules:
     - matches:
         - path:

@@ -1,5 +1,5 @@
-# ABOUTME: Shared namespaces that more than one component writes into, created first (wave 0) so no
-# ABOUTME: Role or Secret lands in a namespace that does not exist yet.
+# ABOUTME: Wave 0. Every platform namespace, created before any component that installs into one.
+# ABOUTME: apps carries the label that opts it into Kyverno policy; no other namespace does.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -7,28 +7,17 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    repoURL: REPLACE_WITH_PLATFORM_REPO_URL
     targetRevision: main
     path: platform/1-foundation/platform-namespaces/manifests
-    directory:
-      recurse: true
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:
     automated:
-      # Never prune a namespace because a file moved: it takes everything inside with it.
-      prune: false
+      prune: true
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

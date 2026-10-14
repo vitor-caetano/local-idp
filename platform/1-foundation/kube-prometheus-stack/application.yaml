@@ -1,14 +1,12 @@
-# ABOUTME: Prometheus, Alertmanager and Grafana. Grafana gets Loki and Tempo as datasources, and
-# ABOUTME: Prometheus selects every ServiceMonitor so golden-path services are scraped unlabelled.
+# ABOUTME: Wave 3. Prometheus, Grafana, kube-state-metrics and node-exporter. Prometheus selects every
+# ABOUTME: ServiceMonitor in the cluster; Grafana carries Loki and Tempo as datasources beside Prometheus.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: kube-prometheus-stack
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:
@@ -16,10 +14,10 @@ spec:
     chart: kube-prometheus-stack
     targetRevision: 86.3.2
     helm:
+      releaseName: kube-prometheus-stack
       valuesObject:
-        # Kind binds etcd, the scheduler, the controller manager and kube-proxy metrics to
-        # 127.0.0.1 inside the node, so Prometheus cannot reach them and the targets sit down
-        # forever. Disable them rather than ship permanently firing alerts.
+        # Kind binds etcd, the scheduler, the controller manager and kube-proxy metrics to loopback, so
+        # those targets could never be scraped. Disabled rather than left permanently down.
         kubeEtcd:
           enabled: false
         kubeScheduler:
@@ -28,31 +26,24 @@ spec:
           enabled: false
         kubeProxy:
           enabled: false
+        alertmanager:
+          enabled: false
         prometheus:
           prometheusSpec:
-            retention: 24h
-            # By default only ServiceMonitors carrying this release's label are selected, so a
-            # golden-path service's ServiceMonitor would be silently ignored and its KEDA trigger
-            # would read zero forever. Select them all.
+            retention: 2d
+            # Select every ServiceMonitor, PodMonitor, rule and probe, not only the ones carrying this
+            # release's label, so a component's monitor is picked up without knowing the release name.
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
             ruleSelectorNilUsesHelmValues: false
-            # Kind's default StorageClass (local-path).
-            storageSpec:
-              volumeClaimTemplate:
-                spec:
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 10Gi
+            probeSelectorNilUsesHelmValues: false
+            scrapeConfigSelectorNilUsesHelmValues: false
         grafana:
-          enabled: true
-          # Local dev only, ephemeral. Not a real credential.
-          adminPassword: "local-dev-only"
+          # A documented local dev value.
+          adminPassword: local-dev-only
           grafana.ini:
             server:
               root_url: https://grafana.localtest.me
-          # The stack provisions Prometheus and Alertmanager as datasources but not Loki or Tempo.
           additionalDataSources:
             - name: Loki
               type: loki
@@ -67,6 +58,8 @@ spec:
               jsonData:
                 tracesToLogsV2:
                   datasourceUid: loki
+                serviceMap:
+                  datasourceUid: prometheus
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
@@ -75,11 +68,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m
