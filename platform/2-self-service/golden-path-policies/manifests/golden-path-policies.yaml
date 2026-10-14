@@ -28,7 +28,7 @@ spec:
       skipBackgroundRequests: true
       validate:
         allowExistingViolations: true
-        failureAction: Audit
+        failureAction: Enforce
         message: "Images in apps must come from localhost:5001, where the CI pipeline pushes."
         pattern:
           spec:
@@ -62,7 +62,7 @@ spec:
       skipBackgroundRequests: true
       validate:
         allowExistingViolations: true
-        failureAction: Audit
+        failureAction: Enforce
         message: "Pods in apps need the app and version labels."
         pattern:
           metadata:
@@ -95,7 +95,7 @@ spec:
       skipBackgroundRequests: true
       validate:
         allowExistingViolations: true
-        failureAction: Audit
+        failureAction: Enforce
         message: "Every container in apps needs a readiness probe, a liveness probe, and CPU and memory limits."
         pattern:
           spec:
