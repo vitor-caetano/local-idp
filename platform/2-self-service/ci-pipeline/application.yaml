@@ -1,0 +1,23 @@
+# ABOUTME: The in-cluster CI: a JetStream EventBus, the gitea webhook EventSource, the ci-go-service Sensor,
+# ABOUTME: and the WorkflowTemplate it submits, which tests, builds with rootless BuildKit and commits the tag.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ci-pipeline
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    targetRevision: main
+    path: platform/2-self-service/ci-pipeline/manifests
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

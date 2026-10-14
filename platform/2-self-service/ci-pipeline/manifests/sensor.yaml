@@ -1,0 +1,65 @@
+# ABOUTME: Turns a push to main into a ci-go-service Workflow, unless the head commit says [skip ci].
+# ABOUTME: The pipeline's own tag commit says exactly that, which is what stops it building itself.
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: ci-go-service
+  namespace: argo-events
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: ci-sensor
+  dependencies:
+    - name: push
+      eventSourceName: gitea
+      eventName: push
+      filters:
+        data:
+          - path: body.ref
+            type: string
+            value:
+              - '^refs/heads/main$'
+          # A string filter value is a regular expression; != passes events that do not match.
+          - path: body.head_commit.message
+            type: string
+            comparator: "!="
+            value:
+              - '\[skip ci\]'
+  triggers:
+    - template:
+        name: submit-ci-go-service
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: ci-go-service-
+                namespace: ci
+              spec:
+                workflowTemplateRef:
+                  name: ci-go-service
+                arguments:
+                  parameters:
+                    - name: repo-name
+                      value: overwritten-by-the-event
+                    - name: repo-url
+                      value: overwritten-by-the-event
+                    - name: revision
+                      value: overwritten-by-the-event
+          parameters:
+            - src:
+                dependencyName: push
+                dataKey: body.repository.name
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: push
+                dataKey: body.repository.clone_url
+              dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: push
+                dataKey: body.after
+              dest: spec.arguments.parameters.2.value
+      retryStrategy:
+        steps: 3

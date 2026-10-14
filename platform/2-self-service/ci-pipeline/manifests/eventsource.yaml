@@ -1,0 +1,18 @@
+# ABOUTME: Receives Gitea's org push webhook at gitea-eventsource-svc.argo-events.svc:12000/push, the
+# ABOUTME: address gitea-config registered on the services org.
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: gitea
+  namespace: argo-events
+spec:
+  eventBusName: default
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  webhook:
+    push:
+      port: "12000"
+      endpoint: /push
+      method: POST

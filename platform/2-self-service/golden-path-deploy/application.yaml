@@ -1,0 +1,23 @@
+# ABOUTME: The deploy half of the golden path: an ApplicationSet that turns every repo in the Gitea services
+# ABOUTME: org into an svc-<name> Application, bounded by the golden-path-services AppProject.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: golden-path-deploy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    targetRevision: main
+    path: platform/2-self-service/golden-path-deploy/manifests
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

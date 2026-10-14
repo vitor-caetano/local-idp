@@ -1,0 +1,45 @@
+# ABOUTME: One svc-<repo> Application per repo in the Gitea services org that has a kustomization in
+# ABOUTME: manifests/. A new repo from the template is deployed with no change to this tree.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: golden-path-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - scmProvider:
+        # The SCM generator's url defaults to the SSH clone URL, which ArgoCD cannot read without a
+        # key. The HTTP one is built from Gitea's ROOT_URL, the in-cluster address.
+        cloneProtocol: https
+        requeueAfterSeconds: 30
+        gitea:
+          api: http://gitea-http.gitea.svc:3000
+          owner: services
+          insecure: true
+          tokenRef:
+            secretName: gitea-scm-token
+            key: token
+        filters:
+          - pathsExist: [manifests/kustomization.yaml]
+  template:
+    metadata:
+      name: "svc-{{ .repository }}"
+      labels:
+        local-idp.dev/golden-path: service
+    spec:
+      project: golden-path-services
+      source:
+        repoURL: "{{ .url }}"
+        targetRevision: "{{ .branch }}"
+        path: manifests
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: apps
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

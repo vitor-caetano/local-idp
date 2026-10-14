@@ -1,0 +1,108 @@
+# ABOUTME: The golden-path policies: images from the local registry, the labels the platform keys on,
+# ABOUTME: and probes plus limits. Audit until phase 7 flips every failureAction here to Enforce.
+#
+# Scoped to namespaces labelled local-idp.dev/policy=enforce, which is apps. A scaffolded service
+# meets all three by construction; a workload that bypasses the golden path meets none of them.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: golden-path-restrict-registries
+  annotations:
+    policies.kyverno.io/title: Images from the local registry only
+    policies.kyverno.io/description: >-
+      Golden-path services run images the CI pipeline built and pushed to localhost:5001. Anything
+      pulled from elsewhere did not come through the pipeline.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  rules:
+    - name: local-registry-only
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
+      validate:
+        allowExistingViolations: true
+        failureAction: Audit
+        message: "Images in apps must come from localhost:5001, where the CI pipeline pushes."
+        pattern:
+          spec:
+            =(initContainers):
+              - image: "localhost:5001/*"
+            containers:
+              - image: "localhost:5001/*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: golden-path-require-labels
+  annotations:
+    policies.kyverno.io/title: Require the app and version labels
+    policies.kyverno.io/description: >-
+      The Service, the ServiceMonitor and the canary all select on app, and version tells the
+      canary's two ReplicaSets apart in Grafana.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  rules:
+    - name: app-and-version
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
+      validate:
+        allowExistingViolations: true
+        failureAction: Audit
+        message: "Pods in apps need the app and version labels."
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+              version: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: golden-path-require-probes
+  annotations:
+    policies.kyverno.io/title: Require probes and limits
+    policies.kyverno.io/description: >-
+      A canary step promotes on readiness, so a container without a readiness probe promotes before
+      it can serve. Limits keep one service from starving the node the others share.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  rules:
+    - name: probes-and-limits
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaceSelector:
+                matchLabels:
+                  local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
+      validate:
+        allowExistingViolations: true
+        failureAction: Audit
+        message: "Every container in apps needs a readiness probe, a liveness probe, and CPU and memory limits."
+        pattern:
+          spec:
+            containers:
+              - readinessProbe: {}
+                livenessProbe: {}
+                resources:
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"

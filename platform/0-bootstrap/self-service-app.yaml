@@ -1,0 +1,25 @@
+# ABOUTME: The self-service App-of-Apps. Reads every */application.yaml under 2-self-service: the CI
+# ABOUTME: pipeline, the deploy ApplicationSet and the golden-path policies. Applied once, in phase 6.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-self-service
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: http://gitea-http.gitea.svc:3000/platform/local-idp.git
+    targetRevision: main
+    path: platform/2-self-service
+    directory:
+      recurse: true
+      include: "*/application.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

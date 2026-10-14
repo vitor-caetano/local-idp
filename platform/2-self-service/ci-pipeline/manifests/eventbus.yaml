@@ -1,0 +1,11 @@
+# ABOUTME: The event bus the EventSource publishes to and the Sensor reads from. The argo-events chart
+# ABOUTME: installs none, so the pipeline declares its own. JetStream, pinned to a version the controller ships.
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: argo-events
+spec:
+  jetstream:
+    version: 2.10.10
+    replicas: 3

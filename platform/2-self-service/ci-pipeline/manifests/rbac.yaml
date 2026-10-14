@@ -1,0 +1,34 @@
+# ABOUTME: The Sensor's identity. It submits Workflows into ci, which means reading the
+# ABOUTME: WorkflowTemplate they reference as well as creating the Workflow.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-sensor
+  namespace: argo-events
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-sensor-submit
+  namespace: ci
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtemplates"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-sensor-submit
+  namespace: ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-sensor-submit
+subjects:
+  - kind: ServiceAccount
+    name: ci-sensor
+    namespace: argo-events

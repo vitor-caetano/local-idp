@@ -1,0 +1,165 @@
+# ABOUTME: The CI pipeline for a golden-path Go service: clone, vet and test, build and push with
+# ABOUTME: rootless BuildKit, then commit the new tag to the repo with [skip ci] so ArgoCD deploys it.
+#
+# Every step runs as uid 1000, the user rootless BuildKit needs, and shares one workspace volume.
+# The image is pushed to kind-registry:5000 (the registry's name inside the cluster) and pulled by
+# the nodes as localhost:5001; both are the same registry.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ci-go-service
+  namespace: ci
+spec:
+  serviceAccountName: ci-runner
+  entrypoint: pipeline
+  arguments:
+    parameters:
+      - name: repo-name
+      - name: repo-url
+      - name: revision
+  securityContext:
+    runAsNonRoot: true
+    # The user in moby/buildkit rootless. The Go steps run as the same uid, so files on the shared
+    # workspace stay writable across steps.
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  ttlStrategy:
+    secondsAfterSuccess: 86400
+    secondsAfterFailure: 86400
+  podGC:
+    strategy: OnWorkflowSuccess
+  volumeClaimGC:
+    strategy: OnWorkflowCompletion
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 1Gi
+  templates:
+    - name: pipeline
+      steps:
+        - - name: clone
+            template: clone
+        - - name: test
+            template: test
+        - - name: build
+            template: build
+        - - name: bump-tag
+            template: bump-tag
+
+    - name: clone
+      container:
+        image: golang:1.27.0
+        env:
+          - name: HOME
+            value: /tmp
+        command: ["/bin/sh"]
+        args:
+          - -ec
+          - |
+            git clone "{{workflow.parameters.repo-url}}" /work/src
+            cd /work/src
+            git checkout --quiet "{{workflow.parameters.revision}}"
+            git log -1 --oneline
+        volumeMounts:
+          - name: workspace
+            mountPath: /work
+
+    - name: test
+      container:
+        image: golang:1.27.0
+        workingDir: /work/src
+        env:
+          - name: HOME
+            value: /tmp
+          - name: GOCACHE
+            value: /tmp/go-cache
+          - name: GOPATH
+            value: /tmp/go
+        command: ["/bin/sh"]
+        args:
+          - -ec
+          - |
+            go vet ./...
+            go test ./...
+        volumeMounts:
+          - name: workspace
+            mountPath: /work
+
+    - name: build
+      container:
+        image: moby/buildkit:v0.33.0-rootless
+        env:
+          # Rootless BuildKit inside an unprivileged pod cannot create its own process sandbox.
+          - name: BUILDKITD_FLAGS
+            value: --oci-worker-no-process-sandbox
+        command: ["/bin/sh"]
+        args:
+          - -ec
+          - |
+            tag="$(printf '%s' '{{workflow.parameters.revision}}' | cut -c1-12)"
+            buildctl-daemonless.sh build \
+              --frontend dockerfile.v0 \
+              --local context=/work/src \
+              --local dockerfile=/work/src \
+              --output "type=image,name=kind-registry:5000/services/{{workflow.parameters.repo-name}}:${tag},push=true,registry.insecure=true"
+            echo "pushed services/{{workflow.parameters.repo-name}}:${tag}"
+        securityContext:
+          # The cost of rootless BuildKit, and why it runs only in the privileged ci namespace.
+          seccompProfile:
+            type: Unconfined
+          appArmorProfile:
+            type: Unconfined
+        volumeMounts:
+          - name: workspace
+            mountPath: /work
+          - name: buildkit-state
+            mountPath: /home/user/.local/share/buildkit
+      volumes:
+        - name: buildkit-state
+          emptyDir: {}
+
+    - name: bump-tag
+      container:
+        image: golang:1.27.0
+        env:
+          - name: HOME
+            value: /tmp
+          - name: GITEA_USER
+            valueFrom:
+              secretKeyRef:
+                name: gitea-ci-credentials
+                key: username
+          - name: GITEA_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: gitea-ci-credentials
+                key: token
+        command: ["/bin/sh"]
+        args:
+          - -ec
+          - |
+            tag="$(printf '%s' '{{workflow.parameters.revision}}' | cut -c1-12)"
+            url="$(printf '%s' '{{workflow.parameters.repo-url}}' | sed "s#://#://${GITEA_USER}:${GITEA_TOKEN}@#")"
+            git clone --quiet "${url}" /tmp/bump
+            cd /tmp/bump
+            git config user.name "local-idp CI"
+            git config user.email "ci@localtest.me"
+            sed -i "s/^\( *newTag:\).*/\1 \"${tag}\"/" manifests/kustomization.yaml
+            if git diff --quiet; then
+              echo "manifests already at ${tag}"
+              exit 0
+            fi
+            # [skip ci] is what the Sensor filters on. Without it this commit would build itself.
+            git commit --quiet -am "[skip ci] Deploy ${tag}"
+            for attempt in 1 2 3; do
+              git push --quiet origin HEAD:main && { echo "deployed ${tag}"; exit 0; }
+              git pull --quiet --rebase origin main
+            done
+            echo "could not push the tag after 3 attempts"
+            exit 1

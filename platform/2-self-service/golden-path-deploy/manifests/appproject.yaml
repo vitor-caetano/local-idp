@@ -1,0 +1,27 @@
+# ABOUTME: The boundary for every golden-path service: sources only from the Gitea services org,
+# ABOUTME: deploys only into apps, and only the kinds the skeleton renders. No cluster-scoped resource.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: golden-path-services
+  namespace: argocd
+spec:
+  description: Services scaffolded from the go-service template.
+  sourceRepos:
+    # The services org lives in Gitea in either Git source mode, so set-git-source.sh leaves it alone.
+    - http://gitea-http.gitea.svc:3000/services/*
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: apps
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: argoproj.io
+      kind: Rollout
+    - group: ""
+      kind: Service
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+    - group: keda.sh
+      kind: ScaledObject
