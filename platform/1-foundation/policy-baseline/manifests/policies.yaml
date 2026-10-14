@@ -9,7 +9,9 @@ metadata:
     policies.kyverno.io/description: >-
       Every container sets a memory limit and a CPU request, so one pod cannot starve its node.
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: require-limits
       match:
@@ -19,7 +21,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
         failureAction: Audit
         message: "Every container needs resources.limits.memory and resources.requests.cpu."
@@ -41,7 +45,9 @@ metadata:
     policies.kyverno.io/description: >-
       No container runs privileged.
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: no-privileged
       match:
@@ -51,7 +57,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
         failureAction: Audit
         message: "Privileged containers are not allowed."
@@ -73,7 +81,9 @@ metadata:
     policies.kyverno.io/description: >-
       Every pod or container declares runAsNonRoot: true.
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: run-as-non-root
       match:
@@ -83,7 +93,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
         failureAction: Audit
         message: "Set securityContext.runAsNonRoot to true on the pod or every container."
@@ -108,7 +120,9 @@ metadata:
     policies.kyverno.io/description: >-
       Every image names an explicit tag other than latest, so a rollout is reproducible.
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: require-explicit-tag
       match:
@@ -118,7 +132,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         # The baseline reports and never blocks. Only the golden-path set is ever flipped to Enforce.
         failureAction: Audit
         message: "Images need an explicit tag other than :latest."
