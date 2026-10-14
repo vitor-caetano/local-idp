@@ -63,6 +63,26 @@ repo. Rendered as Backstage would, the skeleton passes `go vet`, `go test` and `
 the WorkflowTemplate, which arrive in phase 6. Backstage, Postgres and the five routes needed no
 changes.
 
+**Phase 6 passed again** (9 of 9). Before the build, 4 checks failed and 5 skipped. The
+self-service plane is generated: `self-service-app.yaml` (applied once), `ci-pipeline`,
+`golden-path-deploy` and `golden-path-policies` (Audit), all Synced and Healthy. `hello-go` was
+scaffolded through the Backstage scaffolder API, signed in as guest, which is the call the UI's
+Create button makes. All three template steps completed. The scaffold push triggered
+`ci-go-service`, which succeeded. CI's `[skip ci]` tag commit arrived 85 seconds later, and the
+Sensor dropped it as filtered: two pushes, one Workflow. `svc-hello-go` is Synced and Healthy, KEDA
+holds the Rollout at 2 replicas, and its pods pass all seven policies.
+
+- Verified against the pinned source, as the spec asks: in Argo Events v1.9.10 a string data
+  filter value is an unanchored regular expression, and `comparator: "!="` passes on no match. The
+  ref filter is anchored (`^refs/heads/main$`) for that reason. The Gitea push payload keys
+  `body.repository.name`, `body.repository.clone_url` and `body.after` filled the Workflow's
+  parameters.
+- One defect, found by the last check: the service's `http_requests_total` series did not exist
+  until its first request, so Prometheus and the KEDA query saw nothing for an idle service, and the
+  test read Prometheus before its own request had been scraped. The skeleton now starts the `/`
+  series at zero, with a test for it. `hello-go` still runs the old code; phase 7's "new commit
+  under enforcement" carries the fix to it.
+
 ## As of 2026-09-30
 
 **Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and

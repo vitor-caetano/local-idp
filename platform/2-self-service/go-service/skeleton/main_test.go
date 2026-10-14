@@ -49,3 +49,12 @@ func TestMetricsCountRequests(t *testing.T) {
 		t.Fatalf("metrics did not count two requests:\n%s", body)
 	}
 }
+
+func TestMetricsExistBeforeAnyRequest(t *testing.T) {
+	srv := httptest.NewServer(newMux(newRequestCounter()))
+	defer srv.Close()
+	_, body := get(t, srv, "/metrics")
+	if !strings.Contains(body, `http_requests_total{path="/",code="200"} 0`) {
+		t.Fatalf("the / series is missing before the first request:\n%s", body)
+	}
+}

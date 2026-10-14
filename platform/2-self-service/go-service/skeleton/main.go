@@ -22,8 +22,10 @@ type requestCounter struct {
 	counts map[[2]string]uint64
 }
 
+// newRequestCounter starts the series for / at zero, so Prometheus and the KEDA query see the
+// service from its first scrape rather than only after its first request.
 func newRequestCounter() *requestCounter {
-	return &requestCounter{counts: make(map[[2]string]uint64)}
+	return &requestCounter{counts: map[[2]string]uint64{{"/", "200"}: 0}}
 }
 
 func (c *requestCounter) inc(path string, code int) {
