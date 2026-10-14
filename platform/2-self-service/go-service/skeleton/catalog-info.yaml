@@ -5,6 +5,9 @@ metadata:
   description: ${{ values.description }}
   annotations:
     backstage.io/kubernetes-id: ${{ values.name }}
+    # The Kubernetes plugin looks resources up by label. Without this it searches for
+    # backstage.io/kubernetes-id, which the manifests do not carry; they label everything app.
+    backstage.io/kubernetes-label-selector: app=${{ values.name }}
     backstage.io/kubernetes-namespace: apps
     argocd/app-name: svc-${{ values.name }}
   links:

@@ -25,6 +25,28 @@ spec:
             pullPolicy: IfNotPresent
           # The image's CMD, spelled out: the chart's empty args would otherwise be the only signal.
           args: ["--config", "app-config.production.yaml"]
+          # Mounted as a second --config after the image's, so it changes the app without a
+          # rebuild. The backend hands frontend-visible keys such as app.extensions to the browser.
+          appConfig:
+            app:
+              extensions:
+                # app.packages: all discovers the Roadie ArgoCD plugin, whose tab has no filter and
+                # whose cards match every Component. Show them only where there is an Application.
+                - entity-content:argocd/ArgoCdPage:
+                    config:
+                      filter:
+                        metadata.annotations.argocd/app-name:
+                          $exists: true
+                - entity-card:argocd/overviewCard:
+                    config:
+                      filter:
+                        metadata.annotations.argocd/app-name:
+                          $exists: true
+                - entity-card:argocd/historyCard:
+                    config:
+                      filter:
+                        metadata.annotations.argocd/app-name:
+                          $exists: true
           podSecurityContext:
             runAsNonRoot: true
             # The node user in the image (checked with id).
