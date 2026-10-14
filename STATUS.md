@@ -4,12 +4,12 @@ Where the build stands. Update this file when a phase completes.
 
 ## As of 2026-10-14
 
-**The cluster is destroyed; rebuilding from phase 0.** Nothing below describes a running cluster
-any more. The build history and every fix it records still hold: they are committed, and
-`platform/` keeps the phase 7 tree (golden-path policies at `Enforce`). Update the table as each
-phase passes again.
-
-The rebuild regenerates `platform/` from `spec/` (path B), rather than redeploying the committed tree.
+**Rebuild complete. Phase 7 done; the platform is complete again,** on a `platform/` regenerated
+from `spec/` (path B) rather than copied from `solution/`. All 30 Applications are Synced and
+Healthy. Phases 1 and 3 to 7 pass. Phase 0's `test_cluster_is_bare` and two phase 2 checks now fail
+by design, because they assert the state before ArgoCD and before enforcement. The section for
+each phase follows. The 2026-09-30 build further down is history: its fixes still hold, and its
+claims about a running cluster describe the cluster that was destroyed.
 
 **Phase 0 passed again** (5 of 5). Kind `local-idp` on `kindest/node:v1.36.4`: three nodes Ready,
 `kind-registry` on `localhost:5001` reachable from pods as `kind-registry:5000`, inotify raised from
@@ -82,6 +82,26 @@ holds the Rollout at 2 replicas, and its pods pass all seven policies.
   test read Prometheus before its own request had been scraped. The skeleton now starts the `/`
   series at zero, with a test for it. `hello-go` still runs the old code; phase 7's "new commit
   under enforcement" carries the fix to it.
+
+**Phase 7 passed again** (5 of 5). Before the flip, 2 failed. One commit moved the three
+`golden-path-*` ClusterPolicies to `Enforce`; `policy-baseline` stays `Audit`.
+`scripts/denial-demo.sh` shows the `docker.io/library/nginx:latest` Pod denied in `apps` by all
+three policies and admitted in `default`. The new `hello-go` commit (`d262843`, the skeleton's
+zero-counter fix) was built by `ci-go-service` and rolled out as a canary under enforcement, to
+`hello-go:d26284332dbc`. CI's tag commit was filtered again: one build per real push. Phases 1, 3,
+4, 5 and 6 still pass under enforcement. Two phase 2 checks fail by design: one asserts every rule
+is Audit, and the other expects a bare pod to be admitted into `apps`.
+
+| Phase | Rebuild |
+|---|---|
+| 0 Preflight and cluster | Done 2026-10-14 |
+| 1 GitOps and traffic | Done 2026-10-14 |
+| 2 Secrets and policy | Done 2026-10-14 |
+| 3 Observability | Done 2026-10-14 |
+| 4 Delivery and automation | Done 2026-10-14 |
+| 5 Developer portal | Done 2026-10-14 |
+| 6 Golden path | Done 2026-10-14 |
+| 7 Governance | Done 2026-10-14 |
 
 ## As of 2026-09-30
 
