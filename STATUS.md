@@ -2,6 +2,13 @@
 
 Where the build stands. Update this file when a phase completes.
 
+## As of 2026-10-14
+
+**The cluster is destroyed; rebuilding from phase 0.** Nothing below describes a running cluster
+any more. The build history and every fix it records still hold: they are committed, and
+`platform/` keeps the phase 7 tree (golden-path policies at `Enforce`). Update the table as each
+phase passes again.
+
 ## As of 2026-09-30
 
 **Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and
@@ -76,8 +83,9 @@ Tools come from `devbox.json` (see `docs/prerequisites.md`).
 1. Nothing is required. To rebuild from scratch, `./provision/destroy.sh` and start at phase 0; the
    fixes recorded below are all in Git. After phase 1, run `./provision/trust-ca.sh --install` so the
    browser trusts `*.localtest.me`.
-2. The inotify limits reset when the Rancher Desktop VM restarts. Run `devbox run inotify` after each
-   restart.
+2. The inotify limits reset when the Rancher Desktop VM restarts. `create-cluster.sh` raises them on
+   a new cluster; after a restart with the cluster still there, run `devbox run resume`
+   (`provision/resume-cluster.sh`), which raises them and recovers the pods and OpenBao.
 
 ## Unproven until the first build
 
