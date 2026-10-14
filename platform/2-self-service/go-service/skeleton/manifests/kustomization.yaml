@@ -1,0 +1,16 @@
+# The CI pipeline rewrites newTag after every build and commits it with [skip ci]. ArgoCD deploys
+# whatever tag is here; nothing else changes what runs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: apps
+resources:
+  - rollout.yaml
+  - service.yaml
+  - httproute.yaml
+  - servicemonitor.yaml
+  - scaledobject.yaml
+images:
+  - name: service
+    newName: localhost:5001/services/${{ values.name }}
+    # Replaced by the first CI build, seconds after the repo is created.
+    newTag: 0.0.0

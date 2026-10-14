@@ -1,0 +1,16 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.name }}
+  description: ${{ values.description }}
+  annotations:
+    backstage.io/kubernetes-id: ${{ values.name }}
+    backstage.io/kubernetes-namespace: apps
+    argocd/app-name: svc-${{ values.name }}
+  links:
+    - url: https://${{ values.name }}.localtest.me/
+      title: Service
+spec:
+  type: service
+  lifecycle: experimental
+  owner: ${{ values.owner }}

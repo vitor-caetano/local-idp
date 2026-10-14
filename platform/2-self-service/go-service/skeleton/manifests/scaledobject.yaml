@@ -1,0 +1,18 @@
+# Scales the Rollout on request rate. Kind has no metrics-server, so a CPU trigger reads nothing.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ${{ values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: ${{ values.name }}
+  minReplicaCount: 2
+  maxReplicaCount: 5
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://kube-prometheus-stack-prometheus.observability.svc:9090
+        query: sum(rate(http_requests_total{service="${{ values.name }}"}[1m]))
+        threshold: "5"

@@ -1,0 +1,73 @@
+# ABOUTME: The golden path: a Go HTTP service, published to the Gitea services org and registered in
+# ABOUTME: the catalog. Gitea's org webhook starts CI; the ApplicationSet deploys whatever lands there.
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: go-service
+  title: Go service
+  description: >-
+    A Go HTTP service on the standard library, built in the cluster, deployed as a canary Rollout,
+    routed at https://<name>.localtest.me and scaled by KEDA.
+  tags: [go, golden-path]
+spec:
+  owner: group:default/platform-team
+  type: service
+  parameters:
+    - title: Service
+      required: [name, owner]
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Lowercase, digits and dashes. Becomes the repo, the image and the hostname.
+          pattern: '^[a-z][a-z0-9-]{1,28}[a-z0-9]$'
+          ui:autofocus: true
+        description:
+          title: Description
+          type: string
+          default: A Go service from the local-idp golden path.
+        owner:
+          title: Owner
+          type: string
+          default: group:default/platform-team
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+  steps:
+    - id: fetch
+      name: Render the skeleton
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          name: ${{ parameters.name }}
+          # publish:gitea needs a description, and the form leaves it optional.
+          description: ${{ parameters.description or 'A Go service from the local-idp golden path.' }}
+          owner: ${{ parameters.owner }}
+
+    - id: publish
+      name: Publish to Gitea
+      action: publish:gitea
+      input:
+        repoUrl: gitea-http.gitea.svc:3000?owner=services&repo=${{ parameters.name }}
+        description: ${{ parameters.description or 'A Go service from the local-idp golden path.' }}
+        defaultBranch: main
+        repoVisibility: public
+
+    - id: register
+      name: Register in the catalog
+      action: catalog:register
+      input:
+        # publish:gitea's repoContentsUrl drops the branch, so the catalog URL is built explicitly.
+        catalogInfoUrl: http://gitea-http.gitea.svc:3000/services/${{ parameters.name }}/raw/branch/main/catalog-info.yaml
+
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps['publish'].output.remoteUrl }}
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps['register'].output.entityRef }}
+      - title: Service (after CI and the canary finish)
+        url: https://${{ parameters.name }}.localtest.me/

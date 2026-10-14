@@ -1,0 +1,10 @@
+# ABOUTME: The catalog's organisation: one team that owns the platform and every golden-path service
+# ABOUTME: scaffolded from it. Backstage reads this file from PLATFORM_RAW_BASE.
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+  description: Owns the local IDP and the services scaffolded from its golden path.
+spec:
+  type: team
+  children: []
