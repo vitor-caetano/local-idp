@@ -54,6 +54,15 @@ Gitea API (200 on `/api/v1/user`). The org has one active push webhook, to
 `gitea-eventsource-svc.argo-events.svc:12000/push`. Nothing listens there until phase 6 adds the
 EventSource.
 
+**Phase 5 passed again** (4 of 4). The first run failed only the catalog check: Backstage reads the
+`platform-team` Group and the `go-service` Template from `platform/2-self-service/`, which the
+generated tree did not have yet. Phase 5 brings that part of phase 6 forward: `catalog/org.yaml`,
+`go-service/template.yaml`, and the full skeleton, so a template run in the UI produces a working
+repo. Rendered as Backstage would, the skeleton passes `go vet`, `go test` and `kustomize build`.
+7 of the 9 template contract tests pass against `platform/`; the other two read the AppProject and
+the WorkflowTemplate, which arrive in phase 6. Backstage, Postgres and the five routes needed no
+changes.
+
 ## As of 2026-09-30
 
 **Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and
