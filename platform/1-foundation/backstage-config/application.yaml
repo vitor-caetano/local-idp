@@ -1,5 +1,5 @@
 # ABOUTME: Wave 4. What Backstage needs before it starts: Postgres with its password from OpenBao, and the
-# ABOUTME: service account whose read-only token the Kubernetes plugin uses.
+# ABOUTME: the Kubernetes plugin's service account, and the read-only ArgoCD token for the ArgoCD plugin.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

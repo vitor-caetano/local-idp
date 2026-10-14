@@ -104,7 +104,7 @@ components:
     app_version: "alpine/k8s:1.36.4"
     namespace: gitea
     phase: 4
-    notes: "Runs the gitea-config Job, which needs kubectl, curl and jq together. No non-root user, so the Job pins uid 65534."
+    notes: "Runs the gitea-config and argocd-token Jobs, which need kubectl, curl and jq together. No non-root user, so the Jobs pin uid 65534."
 
   # --- Foundation: traffic and TLS ---
   - name: cert-manager

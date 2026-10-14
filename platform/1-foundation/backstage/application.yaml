@@ -67,6 +67,12 @@ spec:
                   key: token
             - name: ARGOCD_URL
               value: http://argo-cd-argocd-server.argocd.svc
+            # Minted by the argocd-token Job in backstage-config for the read-only backstage account.
+            - name: ARGOCD_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-credentials
+                  key: token
             - name: K8S_SA_TOKEN
               valueFrom:
                 secretKeyRef:
