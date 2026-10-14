@@ -19,10 +19,19 @@ on your machine, and builds and pushes `localhost:5001/local-idp/backstage:0.1.2
 | `@backstage/plugin-kubernetes` | frontend | The Kubernetes tab |
 | `@roadiehq/backstage-plugin-argo-cd` | frontend | The ArgoCD tab, over the `/argocd/api` proxy |
 
-The two frontend plugins are installed but not wired into the entity page, because that wiring
-changes with each Backstage frontend-system release. Add the tabs to
-`packages/app/src/components/catalog/EntityPage.tsx` (or the new frontend system's equivalent) in
-`backstage-app/`, then rebuild. The catalog, the scaffolder and the golden path work without them.
+The app uses the new frontend system with `app.packages: all`, so both frontend plugins are
+discovered and wired with no code: each ships a `./alpha` plugin that adds its own entity tab. Two
+things make the tabs show data, and neither needs a rebuild:
+
+- The Kubernetes plugin finds resources by label. The golden-path skeleton's `catalog-info.yaml` sets
+  `backstage.io/kubernetes-label-selector: app=<name>`, the label its manifests carry.
+- The Roadie ArgoCD tab has no filter, and its cards match every Component. The Backstage
+  Application's `appConfig` (in `1-foundation/backstage/application.yaml`) limits all three to
+  entities annotated `argocd/app-name`. The chart mounts it as a second `--config`, and the backend
+  passes `app.extensions` to the browser at runtime.
+
+The ArgoCD tab reads through the `/argocd/api` proxy with the read-only token the `argocd-token` Job
+in `backstage-config` mints.
 
 Bump the tag in both this script (`TAG`) and `1-foundation/backstage/application.yaml` when you
 change the image, or ArgoCD keeps running the old one.

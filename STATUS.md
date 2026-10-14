@@ -112,6 +112,15 @@ is Audit, and the other expects a bare pod to be admitted into `apps`.
   `svc-hello-go` returns 200, and a sync request returns 403 for `sub: backstage`. Minting needs
   `argocd-initial-admin-secret`; delete it and a rerun cannot mint, while the stored token keeps
   working.
+- **The Backstage Kubernetes and ArgoCD tabs show data.** `app.packages: all` had already discovered
+  both plugins, so the tabs were present. The Kubernetes tab was empty: the plugin looked for the
+  `backstage.io/kubernetes-id` label, and the skeleton's manifests carry `app`. The skeleton's
+  `catalog-info.yaml` now sets `backstage.io/kubernetes-label-selector: app=<name>`, and `hello-go`
+  got the same change in a `[skip ci]` commit. The Roadie ArgoCD tab and cards showed on every
+  entity, with "Missing Annotation" on the Group and the Template. The Backstage Application's
+  `appConfig` now limits them to entities annotated `argocd/app-name`, with no image rebuild.
+  Checked in headless Chrome: `hello-go` shows its 2 pods and its ArgoCD deploy history, and the
+  Group and Template show only Overview and TechDocs, with no console errors.
 
 ## As of 2026-09-30
 
@@ -246,6 +255,4 @@ never loads the UI or runs a template.
 
 ## Known open items
 
-- The Backstage ArgoCD and Kubernetes tabs are installed but not wired into the entity page. See
-  `images/backstage/README.md`. Their backends are ready: the ArgoCD proxy has its token, and the
-  Kubernetes plugin has its service account.
+- Nothing open. The Backstage ArgoCD and Kubernetes tabs work; see "Added after the rebuild".
