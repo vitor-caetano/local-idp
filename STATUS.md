@@ -9,6 +9,14 @@ any more. The build history and every fix it records still hold: they are commit
 `platform/` keeps the phase 7 tree (golden-path policies at `Enforce`). Update the table as each
 phase passes again.
 
+The rebuild regenerates `platform/` from `spec/` (path B), rather than redeploying the committed tree.
+
+**Phase 0 passed again** (5 of 5). Kind `local-idp` on `kindest/node:v1.36.4`: three nodes Ready,
+`kind-registry` on `localhost:5001` reachable from pods as `kind-registry:5000`, inotify raised from
+128 to 512. The cluster is bare: namespaces `default`, `kube-system`, `kube-public`,
+`kube-node-lease` and `local-path-storage`, 13 system pods. The first run failed once because a
+worker had joined seconds earlier and was not Ready yet; the rerun passed.
+
 ## As of 2026-09-30
 
 **Phase 7 done. The platform is complete.** `tests/test_phase_7_governance.py` passes (5 of 5), and
