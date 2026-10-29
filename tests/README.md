@@ -2,7 +2,8 @@
 
 Two kinds, one suite.
 
-**Cluster-free** tests read the reference build under `solution/` and run anywhere, including CI:
+**Cluster-free** tests read the reference build under `solution/` and run anywhere, including CI.
+The ones marked "both trees" also check your `platform/` working copy once it exists:
 
 | File | What it holds |
 |---|---|
@@ -10,6 +11,8 @@ Two kinds, one suite.
 | `test_platform_contract.py` | The defect classes in `AGENTS.md` that a manifest can show without a cluster |
 | `test_argocd_health_checks.py` | Every shipped kind has a health decision |
 | `test_policies.py` | Every Kyverno rule ships Audit and is scoped to the enrolment label |
+| `test_spelled_out_defaults.py` | No Application ignores drift; manifests carry the defaults the cluster adds (both trees) |
+| `test_portal_wiring.py` | The Backstage ArgoCD token, read-only role, tab filter and Kubernetes selector (both trees) |
 | `test_git_source.py` | `set-git-source.sh` switches Gitea to GitHub and back, on a throwaway copy |
 | `test_golden_path_template.py` | The template renders to manifests the AppProject, Gateway and policies accept, and its Go code passes `go test` |
 | `test_writing_standards.py` | No dashes or banned words in any Markdown |

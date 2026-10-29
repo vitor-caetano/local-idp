@@ -48,6 +48,11 @@ Docker (Rancher Desktop, dockerd engine) with at least 14 GiB and 6 CPUs, and th
    Healthy regardless.
 8. **Validate before you commit.** `helm template` the chart with your values, round-trip the YAML,
    and run the cluster-free suite.
+9. **Spell out the defaults the cluster adds.** A webhook or the API server that fills in a field
+   the manifest leaves out shows as drift, and the Application never reaches Synced. Write the
+   defaulted field into the manifest. Never use an Application's `ignoreDifferences`: it hides a
+   deliberate change to the same field. A field that cannot live in Git goes in
+   `argocd-values.yaml` as a cluster-wide ignore that matches only the value the cluster adds.
 
 When something does not converge, diagnose from ArgoCD status and pod events, fix the root cause in
 Git, commit, and push. Deleting a pod does not fix a Git-sourced fault.

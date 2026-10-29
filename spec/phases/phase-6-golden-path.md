@@ -10,6 +10,10 @@ with no step outside Git.
   WorkflowTemplate
 - `golden-path-deploy`: the `golden-path-services` AppProject and ApplicationSet
 - `golden-path-policies` in Audit
+- The skeleton's `catalog-info.yaml` sets `backstage.io/kubernetes-label-selector: app=<name>`, the
+  label its manifests carry. The Kubernetes plugin finds nothing by `kubernetes-id` alone
+- The skeleton's `/metrics` reports `http_requests_total` at zero before the first request, so
+  Prometheus and the KEDA query have a series from the first scrape, and `main_test.go` proves it
 - A service named `hello-go` scaffolded from the Backstage template
 
 **Test criteria (`tests/test_phase_6_golden_path.py`):**

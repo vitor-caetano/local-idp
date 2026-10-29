@@ -2,10 +2,12 @@
 # ABOUTME: over HTTPS with the local CA, and the golden-path template in the catalog.
 import json
 
-from conftest import assert_apps_healthy, get_json, host_curl, incluster_curl, local_ca_file
+from conftest import (assert_apps_healthy, get_json, host_curl, incluster_curl, local_ca_file,
+                      secret_value)
 
 HOSTS = ["argocd", "gitea", "grafana", "workflows", "backstage"]
 BACKSTAGE = "http://backstage.backstage.svc:7007"
+ARGOCD = "http://argo-cd-argocd-server.argocd.svc"
 
 
 def test_portal_apps_healthy():
@@ -36,15 +38,18 @@ def test_every_ui_answers_over_https():
     assert not bad, "UIs not answering: " + ", ".join(bad)
 
 
-def test_catalog_has_the_golden_path():
+def _guest_token():
     # The backend refuses unauthenticated calls. Sign in as guest, the way the browser does.
     body, code = incluster_curl(
         f"{BACKSTAGE}/api/auth/guest/refresh?optional&env=production",
         "-H", "X-Requested-With: XMLHttpRequest", ns="backstage",
     )
     assert code == "200", f"guest sign-in failed: {body}"
-    token = json.loads(body)["backstageIdentity"]["token"]
+    return json.loads(body)["backstageIdentity"]["token"]
 
+
+def test_catalog_has_the_golden_path():
+    token = _guest_token()
     body, code = incluster_curl(
         f"{BACKSTAGE}/api/catalog/entities/by-query",
         "-H", f"Authorization: Bearer {token}",
@@ -54,3 +59,22 @@ def test_catalog_has_the_golden_path():
     names = {(e["kind"], e["metadata"]["name"]) for e in json.loads(body)["items"]}
     assert ("Template", "go-service") in names, names
     assert ("Group", "platform-team") in names, names
+
+
+def test_argocd_token_signs_in_as_the_backstage_account():
+    token = secret_value("backstage", "argocd-credentials", "token")
+    body, code = incluster_curl(
+        f"{ARGOCD}/api/v1/session/userinfo", "-H", f"Authorization: Bearer {token}", ns="backstage",
+    )
+    assert code == "200", body
+    info = json.loads(body)
+    assert info.get("loggedIn") is True and info.get("username") == "backstage", info
+
+
+def test_backstage_reads_argocd_through_its_proxy():
+    body, code = incluster_curl(
+        f"{BACKSTAGE}/api/proxy/argocd/api/applications/backstage",
+        "-H", f"Authorization: Bearer {_guest_token()}", ns="backstage",
+    )
+    assert code == "200", f"the ArgoCD proxy answered {code}: {body[:300]}"
+    assert json.loads(body)["metadata"]["name"] == "backstage"

@@ -1,6 +1,7 @@
 # ABOUTME: Shared pytest helpers. All cluster access goes through an explicit kubeconfig and a
 # ABOUTME: context guard, never the default one, and cluster tests skip when none is given.
 import base64
+import glob
 import json
 import os
 import subprocess
@@ -13,6 +14,7 @@ KUBECONFIG_FILE = os.environ.get("KUBECONFIG_FILE", "")
 EXPECTED_CONTEXT = os.environ.get("EXPECTED_CONTEXT", "")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOLUTION = os.path.join(REPO_ROOT, "solution", "platform")
+WORKING = os.path.join(REPO_ROOT, "platform")
 
 
 def _run(args, timeout=60, **kwargs):
@@ -22,6 +24,26 @@ def _run(args, timeout=60, **kwargs):
 def needs_cluster():
     if not KUBECONFIG_FILE:
         pytest.skip("KUBECONFIG_FILE not set; cluster tests skipped")
+
+
+@pytest.fixture(params=[SOLUTION, WORKING], ids=["solution", "platform"])
+def tree(request):
+    """The reference build, then your working copy, so a from-scratch build is held to the same
+    contract. Skips the working copy until it exists."""
+    if not os.path.isdir(request.param):
+        pytest.skip("no platform/ working copy yet")
+    return request.param
+
+
+def tree_docs(tree, pattern="**/*.yaml"):
+    """Yield (path, doc) for every YAML mapping under tree that matches pattern."""
+    import yaml  # the test group installs it; the cluster-only helpers above do not need it
+
+    for path in sorted(glob.glob(os.path.join(tree, pattern), recursive=True)):
+        with open(path) as handle:
+            for doc in yaml.safe_load_all(handle):
+                if isinstance(doc, dict):
+                    yield path, doc
 
 
 @pytest.fixture(scope="session", autouse=True)

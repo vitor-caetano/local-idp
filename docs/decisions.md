@@ -58,3 +58,13 @@ ArgoCD stopped assessing child Application health in 1.8, which reduces sync wav
 to creation order. The health check is restored in `argocd-values.yaml`, so a wave waits for the one
 before it. The trade: a stuck early wave holds everything after it, which points straight at the
 problem.
+
+## D10, 2026-10-29: Spell out cluster defaults instead of ignoring drift
+
+The first build kept the foundation Synced with per-Application `ignoreDifferences` on every field
+the ESO and Kyverno webhooks default. That also hid a deliberate change to any of those fields. The
+manifests now carry the defaults, and no Application ignores anything. Fields that cannot live in
+Git (CRD conversion `None`, the empty metadata maps on Kyverno's CRDs, the deprecated
+`validationFailureAction` Kyverno copies onto ClusterPolicies) are cluster-wide ignores in
+`argocd-values.yaml`, each matching only the value the cluster adds. Build rule 9 states it, and
+`tests/test_spelled_out_defaults.py` enforces it on both trees.

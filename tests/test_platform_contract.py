@@ -1,27 +1,19 @@
-# ABOUTME: Contract tests for the reference manifests, one per defect class in AGENTS.md that can be
-# ABOUTME: caught without a cluster. Each is a failure that reads Synced and Healthy on a live one.
-import glob
+# ABOUTME: Contract tests for the reference manifests and your working copy, one per defect class in
+# ABOUTME: AGENTS.md that can be caught without a cluster. Each reads Synced and Healthy on a live one.
 import os
 
 import pytest
 
 yaml = pytest.importorskip("yaml")
 
-from conftest import REPO_ROOT, SOLUTION
+from conftest import REPO_ROOT, SOLUTION, WORKING, tree_docs
 
 PLACEHOLDER = "REPLACE_WITH_PLATFORM_REPO_URL"
 
 
-def _yaml_docs(pattern):
-    for path in glob.glob(os.path.join(SOLUTION, pattern), recursive=True):
-        with open(path) as handle:
-            for doc in yaml.safe_load_all(handle):
-                if isinstance(doc, dict):
-                    yield path, doc
-
-
-def _applications():
-    return [(p, d) for p, d in _yaml_docs("**/application.yaml") if d.get("kind") == "Application"]
+def _applications(tree):
+    return [(p, d) for p, d in tree_docs(tree, "**/application.yaml")
+            if d.get("kind") == "Application"]
 
 
 def _rel(path):
@@ -32,10 +24,11 @@ def _rel(path):
 
 def test_every_git_sourced_application_uses_the_placeholder():
     # A hardcoded repoURL survives a Git source switch and keeps reading the old source, so half the
-    # platform follows the switch and half does not, and nothing reports it.
+    # platform follows the switch and half does not, and nothing reports it. Reference only: in your
+    # working copy set-git-source.sh has replaced the placeholder, which the next test checks.
     offenders = []
-    for path, app in _applications() + [
-        (p, d) for p, d in _yaml_docs("0-bootstrap/*.yaml") if d.get("kind") == "Application"
+    for path, app in _applications(SOLUTION) + [
+        (p, d) for p, d in tree_docs(SOLUTION, "0-bootstrap/*.yaml") if d.get("kind") == "Application"
     ]:
         source = app["spec"]["source"]
         if "chart" in source:
@@ -46,11 +39,10 @@ def test_every_git_sourced_application_uses_the_placeholder():
 
 
 def test_working_copy_has_no_unsubstituted_placeholders():
-    working = os.path.join(REPO_ROOT, "platform")
-    if not os.path.isdir(working):
+    if not os.path.isdir(WORKING):
         pytest.skip("no platform/ working copy yet")
     offenders = []
-    for root, _, files in os.walk(working):
+    for root, _, files in os.walk(WORKING):
         for name in files:
             if not name.endswith((".yaml", ".yml")):
                 continue
@@ -84,9 +76,9 @@ def _pod_specs(doc):
                                     if "container" in t]}
 
 
-def test_run_as_non_root_always_has_a_numeric_uid():
+def test_run_as_non_root_always_has_a_numeric_uid(tree):
     offenders = []
-    for path, doc in _yaml_docs("**/*.yaml"):
+    for path, doc in tree_docs(tree):
         for label, pod in _pod_specs(doc):
             pod_sc = pod.get("securityContext") or {}
             for container in pod.get("containers", []) + pod.get("initContainers", []):
@@ -98,10 +90,10 @@ def test_run_as_non_root_always_has_a_numeric_uid():
     assert not offenders, "runAsNonRoot without a numeric runAsUser:\n" + "\n".join(offenders)
 
 
-def test_helm_values_that_set_run_as_non_root_pin_a_uid():
+def test_helm_values_that_set_run_as_non_root_pin_a_uid(tree):
     # The Backstage chart takes its pod security context through values, not a pod template.
     offenders = []
-    for path, app in _applications():
+    for path, app in _applications(tree):
         values = app["spec"]["source"].get("helm", {}).get("valuesObject", {})
         for key, block in _find_key(values, "podSecurityContext"):
             if block.get("runAsNonRoot") and not isinstance(block.get("runAsUser"), int):
@@ -135,9 +127,9 @@ def _image_blocks(obj):
             yield from _image_blocks(v)
 
 
-def test_no_image_repository_doubles_the_registry_host():
+def test_no_image_repository_doubles_the_registry_host(tree):
     bad = []
-    for path, app in _applications():
+    for path, app in _applications(tree):
         for img in _image_blocks(app):
             repo, registry = img["repository"], img["registry"]
             first, _, rest = repo.partition("/")
@@ -147,9 +139,9 @@ def test_no_image_repository_doubles_the_registry_host():
     assert not bad, "repository must not include the registry host:\n" + "\n".join(bad)
 
 
-def test_backstage_image_tag_matches_the_build_script():
+def test_backstage_image_tag_matches_the_build_script(tree):
     # Bump one without the other and ArgoCD keeps running the old image, or pulls one never built.
-    with open(os.path.join(SOLUTION, "1-foundation", "backstage", "application.yaml")) as handle:
+    with open(os.path.join(tree, "1-foundation", "backstage", "application.yaml")) as handle:
         tag = yaml.safe_load(handle)["spec"]["source"]["helm"]["valuesObject"]["backstage"]["image"]["tag"]
     with open(os.path.join(REPO_ROOT, "images", "backstage", "build-and-push.sh")) as handle:
         script = handle.read()
@@ -158,10 +150,10 @@ def test_backstage_image_tag_matches_the_build_script():
 
 # --- Class 5: credentials that drift ---------------------------------------------------------------
 
-def test_seed_jobs_read_credentials_from_secrets():
+def test_seed_jobs_read_credentials_from_secrets(tree):
     # A literal password in a Job's env is a second copy that will drift from the chart values.
     offenders = []
-    for path, doc in _yaml_docs("**/manifests/*.yaml"):
+    for path, doc in tree_docs(tree, "**/manifests/*.yaml"):
         if doc.get("kind") != "Job":
             continue
         for container in doc["spec"]["template"]["spec"]["containers"]:
@@ -175,9 +167,9 @@ def test_seed_jobs_read_credentials_from_secrets():
 
 # --- Structure --------------------------------------------------------------------------------
 
-def test_every_application_uses_server_side_apply_and_a_wave():
+def test_every_application_uses_server_side_apply_and_a_wave(tree):
     offenders = []
-    for path, app in _applications():
+    for path, app in _applications(tree):
         opts = app["spec"].get("syncPolicy", {}).get("syncOptions", [])
         if "ServerSideApply=true" not in opts:
             offenders.append(f"{_rel(path)}: no ServerSideApply=true")
@@ -186,14 +178,14 @@ def test_every_application_uses_server_side_apply_and_a_wave():
     assert not offenders, "\n".join(offenders)
 
 
-def test_manifest_sourced_applications_point_at_their_own_directory():
+def test_manifest_sourced_applications_point_at_their_own_directory(tree):
     # A path typo leaves an Application Synced over an empty directory: green, and nothing applied.
     offenders = []
-    for path, app in _applications():
+    for path, app in _applications(tree):
         source = app["spec"]["source"]
         if "chart" in source:
             continue
-        expected = os.path.relpath(os.path.join(os.path.dirname(path), "manifests"), SOLUTION)
+        expected = os.path.relpath(os.path.join(os.path.dirname(path), "manifests"), tree)
         if source["path"] != "platform/" + expected:
             offenders.append(f"{_rel(path)}: path={source['path']}, expected platform/{expected}")
         if not os.path.isdir(os.path.join(os.path.dirname(path), "manifests")):

@@ -13,6 +13,12 @@ can understand it, not the order ArgoCD installs it.
   generates `secret/backstage-postgres`, and the demo ExternalSecret
 - `policy-baseline`: four Audit ClusterPolicies scoped to namespaces labelled
   `local-idp.dev/policy=enforce` (only `apps`)
+- Every ExternalSecret and ClusterPolicy spells out the defaults its webhook adds (build rule 9).
+  ExternalSecrets: `target.creationPolicy`, `target.deletionPolicy`, and on every `remoteRef` the
+  `conversionStrategy`, `decodingStrategy`, `metadataPolicy` and `nullBytePolicy`. ClusterPolicies:
+  `admission`, `background` and `emitWarning` on the spec, `skipBackgroundRequests` on every rule,
+  and `allowExistingViolations` on every `validate`. Without them `openbao-config`,
+  `backstage-config` and `policy-baseline` never reach Synced
 
 **Test criteria (`tests/test_phase_2_secrets_and_policy.py`):**
 - The four Applications above are Synced and Healthy (`policy-baseline` arrives in wave 6, so this
@@ -21,6 +27,9 @@ can understand it, not the order ArgoCD installs it.
 - `Secret/demo-app-credentials` exists in `openbao` and holds the seeded username
 - Every ClusterPolicy in the cluster has every rule at `failureAction: Audit`
 - A privileged pod in `apps` is admitted (Audit does not block) and produces a policy report entry
+
+Cluster-free, `tests/test_spelled_out_defaults.py` checks the defaults above and that no Application
+sets `ignoreDifferences`, in both `solution/platform/` and your `platform/`.
 
 **Completion promise:** `<promise>PHASE2_DONE</promise>`
 

@@ -40,6 +40,14 @@ func TestMetricsCountsRootRequests(t *testing.T) {
 	}
 }
 
+func TestMetricsExistBeforeAnyRequest(t *testing.T) {
+	// KEDA's query and Prometheus need the series from the first scrape, not the first request.
+	body := get(t, (&server{}).routes(), "/metrics").Body.String()
+	if !strings.Contains(body, "http_requests_total 0\n") {
+		t.Fatalf("the counter is missing before the first request:\n%s", body)
+	}
+}
+
 func TestUnknownPathIs404(t *testing.T) {
 	if rec := get(t, (&server{}).routes(), "/nope"); rec.Code != http.StatusNotFound {
 		t.Fatalf("GET /nope = %d, want 404", rec.Code)
