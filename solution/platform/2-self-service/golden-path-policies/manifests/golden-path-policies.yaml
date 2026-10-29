@@ -14,7 +14,9 @@ metadata:
     policies.kyverno.io/category: Supply Chain
     policies.kyverno.io/severity: high
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: local-registry-only
       match:
@@ -24,7 +26,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "Images in apps must come from the platform registry (localhost:5001/)."
         pattern:
@@ -41,7 +45,9 @@ metadata:
     policies.kyverno.io/category: Supply Chain
     policies.kyverno.io/severity: medium
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: require-explicit-tag
       match:
@@ -51,7 +57,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "Images must carry an explicit tag other than latest."
         pattern:
@@ -68,7 +76,9 @@ metadata:
     policies.kyverno.io/category: Pod Security
     policies.kyverno.io/severity: high
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: run-as-non-root
       match:
@@ -78,7 +88,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "Pods in apps must set securityContext.runAsNonRoot: true."
         pattern:

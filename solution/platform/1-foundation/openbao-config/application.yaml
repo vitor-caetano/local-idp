@@ -20,17 +20,6 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: openbao
-  # External Secrets defaults nested fields onto the ExternalSecret after apply, which the manifest
-  # does not set, so ArgoCD sees drift and the app never reaches Synced. Ignore the defaulted fields.
-  ignoreDifferences:
-    - group: external-secrets.io
-      kind: ExternalSecret
-      jqPathExpressions:
-        - .spec.data[].remoteRef.conversionStrategy
-        - .spec.data[].remoteRef.decodingStrategy
-        - .spec.data[].remoteRef.metadataPolicy
-        - .spec.data[].remoteRef.nullBytePolicy
-        - .spec.target.deletionPolicy
   syncPolicy:
     automated:
       prune: true

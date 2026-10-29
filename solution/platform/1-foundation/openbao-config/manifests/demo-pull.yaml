@@ -15,12 +15,21 @@ spec:
   target:
     name: demo-app-credentials
     creationPolicy: Owner
+    deletionPolicy: Retain
   data:
     - secretKey: username
       remoteRef:
         key: demo
         property: username
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore
     - secretKey: password
       remoteRef:
         key: demo
         property: password
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore

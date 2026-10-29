@@ -13,7 +13,9 @@ metadata:
     policies.kyverno.io/category: Best Practices
     policies.kyverno.io/severity: medium
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: require-limits
       match:
@@ -23,7 +25,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "CPU and memory limits are required for all containers."
         pattern:
@@ -43,7 +47,9 @@ metadata:
     policies.kyverno.io/category: Best Practices
     policies.kyverno.io/severity: medium
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: require-readiness-probe
       match:
@@ -53,7 +59,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "A readinessProbe is required for all containers."
         pattern:
@@ -68,7 +76,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "A livenessProbe is required for all containers."
         pattern:
@@ -85,7 +95,9 @@ metadata:
     policies.kyverno.io/category: Best Practices
     policies.kyverno.io/severity: medium
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: require-app-and-version-labels
       match:
@@ -95,7 +107,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "The labels 'app' and 'version' are required on pods."
         pattern:
@@ -113,7 +127,9 @@ metadata:
     policies.kyverno.io/category: Pod Security
     policies.kyverno.io/severity: high
 spec:
+  admission: true
   background: true
+  emitWarning: false
   rules:
     - name: disallow-privileged-containers
       match:
@@ -123,7 +139,9 @@ spec:
               namespaceSelector:
                 matchLabels:
                   local-idp.dev/policy: enforce
+      skipBackgroundRequests: true
       validate:
+        allowExistingViolations: true
         failureAction: Audit
         message: "Privileged containers are not allowed."
         pattern:

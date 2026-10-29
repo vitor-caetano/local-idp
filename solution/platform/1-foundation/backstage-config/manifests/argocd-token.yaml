@@ -1,0 +1,124 @@
+# ABOUTME: Mints the read-only ArgoCD token the Backstage ArgoCD plugin sends through its proxy, and
+# ABOUTME: stores it as backstage/argocd-credentials. Keeps a stored token that still works.
+#
+# The backstage account and its read-only role are declared in 0-bootstrap/argocd-values.yaml. The
+# Job signs in as admin with argocd-initial-admin-secret to mint the token. If you delete that
+# Secret, as ArgoCD suggests, a rerun can no longer mint one; the stored token keeps working.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-token
+  namespace: backstage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-token-read-admin
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["argocd-initial-admin-secret"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-token-read-admin
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-token-read-admin
+subjects:
+  - kind: ServiceAccount
+    name: argocd-token
+    namespace: backstage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-token-write
+  namespace: backstage
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-token-write
+  namespace: backstage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-token-write
+subjects:
+  - kind: ServiceAccount
+    name: argocd-token
+    namespace: backstage
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argocd-token
+  namespace: backstage
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      serviceAccountName: argocd-token
+      restartPolicy: OnFailure
+      securityContext:
+        # alpine/k8s has no non-root user; nobody needs nothing but /tmp.
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mint
+          image: alpine/k8s:1.36.4
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: ARGOCD
+              value: http://argo-cd-argocd-server.argocd.svc
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until curl -fsS "${ARGOCD}/healthz" >/dev/null; do echo "waiting for ArgoCD"; sleep 3; done
+
+              # A stored token that ArgoCD still accepts is kept, so reruns do not pile up tokens.
+              current="$(kubectl get secret argocd-credentials -n backstage \
+                -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)"
+              if [ -n "${current}" ] && curl -fsS -H "Authorization: Bearer ${current}" \
+                  "${ARGOCD}/api/v1/session/userinfo" | jq -e '.loggedIn == true' >/dev/null; then
+                echo "backstage/argocd-credentials holds a working token"
+                exit 0
+              fi
+
+              password="$(kubectl get secret argocd-initial-admin-secret -n argocd \
+                -o jsonpath='{.data.password}' | base64 -d)"
+              session="$(jq -n --arg p "${password}" '{username:"admin",password:$p}' \
+                | curl -fsS -H 'Content-Type: application/json' -d @- "${ARGOCD}/api/v1/session" \
+                | jq -r .token)"
+              token="$(curl -fsS -H "Authorization: Bearer ${session}" -H 'Content-Type: application/json' \
+                -d '{"id":"backstage-plugin","expiresIn":0}' \
+                "${ARGOCD}/api/v1/account/backstage/token" | jq -r .token)"
+              [ -n "${token}" ] && [ "${token}" != "null" ] || { echo "ArgoCD returned no token"; exit 1; }
+
+              kubectl create secret generic argocd-credentials -n backstage \
+                --from-literal=token="${token}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+              echo "wrote backstage/argocd-credentials"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi

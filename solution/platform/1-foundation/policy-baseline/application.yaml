@@ -19,18 +19,6 @@ spec:
       recurse: true
   destination:
     server: https://kubernetes.default.svc
-  # Kyverno's webhook defaults several fields onto every ClusterPolicy after apply. The manifests set
-  # only background and rules, so ArgoCD sees the defaults as drift. jsonPointers cannot reach into
-  # the rules array, so these are jq paths.
-  ignoreDifferences:
-    - group: kyverno.io
-      kind: ClusterPolicy
-      jqPathExpressions:
-        - .spec.admission
-        - .spec.emitWarning
-        - .spec.validationFailureAction
-        - .spec.rules[].skipBackgroundRequests
-        - .spec.rules[].validate.allowExistingViolations
   syncPolicy:
     automated:
       prune: true

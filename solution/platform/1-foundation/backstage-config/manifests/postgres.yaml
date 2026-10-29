@@ -19,6 +19,7 @@ spec:
   target:
     name: backstage-postgres
     creationPolicy: Owner
+    deletionPolicy: Retain
   data:
     # Named the way both the postgres image and Backstage's app-config read them, so one Secret
     # serves both (defect class 5).
@@ -26,10 +27,18 @@ spec:
       remoteRef:
         key: backstage-postgres
         property: username
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore
     - secretKey: POSTGRES_PASSWORD
       remoteRef:
         key: backstage-postgres
         property: password
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore
 ---
 apiVersion: v1
 kind: Service

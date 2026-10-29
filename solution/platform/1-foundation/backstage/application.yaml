@@ -29,6 +29,28 @@ spec:
           args:
             - "--config"
             - "app-config.production.yaml"
+          # Mounted as a second --config after the image's, so it changes the app without a
+          # rebuild. The backend hands frontend-visible keys such as app.extensions to the browser.
+          appConfig:
+            app:
+              extensions:
+                # app.packages: all discovers the Roadie ArgoCD plugin, whose tab has no filter and
+                # whose cards match every Component. Show them only where there is an Application.
+                - entity-content:argocd/ArgoCdPage:
+                    config:
+                      filter:
+                        metadata.annotations.argocd/app-name:
+                          $exists: true
+                - entity-card:argocd/overviewCard:
+                    config:
+                      filter:
+                        metadata.annotations.argocd/app-name:
+                          $exists: true
+                - entity-card:argocd/historyCard:
+                    config:
+                      filter:
+                        metadata.annotations.argocd/app-name:
+                          $exists: true
           extraEnvVars:
             - name: BACKSTAGE_BASE_URL
               value: https://backstage.localtest.me
@@ -36,6 +58,12 @@ spec:
               value: gitea-http.gitea.svc:3000
             - name: ARGOCD_URL
               value: http://argo-cd-argocd-server.argocd.svc
+            # Minted by the argocd-token Job in backstage-config for the read-only backstage account.
+            - name: ARGOCD_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-credentials
+                  key: token
             - name: POSTGRES_HOST
               value: backstage-postgres.backstage.svc
             - name: POSTGRES_PORT

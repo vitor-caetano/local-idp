@@ -19,6 +19,21 @@ configs:
     # portal's ArgoCD tab does not stop working a day after the cluster is built.
     accounts.backstage: apiKey
 
+    # Fields the cluster adds that cannot live in Git. Every other default is spelled out in the
+    # manifests instead, so a deliberate change to it still shows as a diff.
+    # - The API server adds conversion strategy None to CRDs that do not set one, and drops the
+    #   empty labels and annotations maps the Kyverno chart renders on its CRDs.
+    resource.customizations.ignoreDifferences.apiextensions.k8s.io_CustomResourceDefinition: |
+      jqPathExpressions:
+        - '.spec.conversion | select(. == {"strategy": "None"})'
+        - '.metadata.labels | select(. == {})'
+        - '.metadata.annotations | select(. == {})'
+    # - Kyverno's webhook copies the deprecated spec-level validationFailureAction onto every
+    #   ClusterPolicy. The policies use rule-level failureAction, and tests forbid the spec-level one.
+    resource.customizations.ignoreDifferences.kyverno.io_ClusterPolicy: |
+      jsonPointers:
+        - /spec/validationFailureAction
+
     # Application: ArgoCD stopped assessing child Application health in 1.8, so sync waves in an
     # App-of-Apps only order creation, and wave 5 starts while wave 0 is still installing CRDs. This
     # restores the assessment, so each wave waits for the previous one to be Healthy. The cost: a
